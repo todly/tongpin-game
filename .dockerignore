@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.env
+.env.*
+coverage
+artifacts
+**/unpackage
+*.log
+**/project.private.config.json
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.crt

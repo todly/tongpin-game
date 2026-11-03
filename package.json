@@ -1,0 +1,15 @@
+{
+  "name": "word-sync",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "pnpm --filter @word-sync/shared build && pnpm --parallel --filter @word-sync/server --filter @word-sync/web dev",
+    "build": "pnpm --filter @word-sync/shared build && pnpm --filter @word-sync/server build && pnpm --filter @word-sync/web build",
+    "typecheck": "pnpm --filter @word-sync/shared build && pnpm -r typecheck",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
