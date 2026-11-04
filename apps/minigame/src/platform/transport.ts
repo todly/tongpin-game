@@ -1,4 +1,9 @@
+import type { TimeSyncResponse } from '@word-sync/shared';
+import { ServerClock } from './clock';
 export class Transport {
+  readonly clock=new ServerClock();
+  private calibration?:number;
+  private async calibrate(generation:number){const sent=this.clock.tick();try{const value=await this.request<TimeSyncResponse>('time:sync',null);if(generation===this.generation)this.clock.sample(sent,this.clock.tick(),value);}catch{/* Older servers may reject read-only clock requests. */}}
   private task:any;
   private generation=0;
   private counter=0;
@@ -7,7 +12,7 @@ export class Transport {
   private pending=new Map<string,{resolve:(v:any)=>void;reject:(e:Error)=>void;timer:number}>();
   onState:(s:any)=>void=()=>{};
   onClose:()=>void=()=>{};
-  constructor(private config=__CONFIG__,private api=wx) {}
+  constructor(private config=__CONFIG__,private api=wx) {const performance=api.getPerformance?.();if(performance?.now)this.clock=new ServerClock(()=>performance.now());}
   async connect() {
     this.close(); const generation=this.generation;
     let task:any;
@@ -21,7 +26,7 @@ export class Transport {
     await new Promise<void>((resolve,reject)=>{
       const timer=setTimeout(()=>{reject(new Error('连接超时。'));this.close();this.onClose();},10000);
       this.cancelOpen=()=>{clearTimeout(timer);reject(new Error('连接已取消。'));};
-      task.onOpen(()=>{if(generation!==this.generation)return;clearTimeout(timer);this.cancelOpen=undefined;this.heartbeat=setInterval(()=>{void this.request('ping',null).catch(()=>{this.close();this.onClose();});},20000);resolve();});
+      task.onOpen(()=>{if(generation!==this.generation)return;clearTimeout(timer);this.cancelOpen=undefined;this.heartbeat=setInterval(()=>{void this.request('ping',null).catch(()=>{this.close();this.onClose();});},20000);this.clock.reset();void this.calibrate(generation);this.calibration=setInterval(()=>{this.clock.reset();void this.calibrate(generation);},30000);resolve();});
       task.onMessage((message:any)=>{
         if(generation!==this.generation||typeof message.data!=='string')return;
         let value:any;try{value=JSON.parse(message.data);}catch{return;}
@@ -36,10 +41,10 @@ export class Transport {
     if(!this.task)return Promise.reject(new Error('尚未连接。'));
     const requestId=`${this.generation}-${++this.counter}`;
     return new Promise((resolve,reject)=>{
-      const timer=setTimeout(()=>{this.pending.delete(requestId);reject(new Error('确认超时，结果未知，请等待恢复，不要重复提交。'));this.close();this.onClose();},8000);
+      const timer=setTimeout(()=>{this.pending.delete(requestId);reject(new Error('确认超时，结果未知，请等待恢复，不要重复提交。'));if(event!=='time:sync'){this.close();this.onClose();}},8000);
       this.pending.set(requestId,{resolve,reject,timer});
       this.task.send({data:JSON.stringify({requestId,event,data}),fail:()=>{const p=this.pending.get(requestId);if(p){clearTimeout(p.timer);this.pending.delete(requestId);reject(new Error('消息发送失败，结果未知。'));this.close();this.onClose();}}});
     });
   }
-  close(){this.generation++;this.cancelOpen?.();this.cancelOpen=undefined;clearInterval(this.heartbeat);this.heartbeat=undefined;const task=this.task;this.task=undefined;task?.close({});for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(new Error('连接中断，操作结果未知。'));}this.pending.clear();}
+  close(){clearInterval(this.calibration);this.calibration=undefined;this.generation++;this.cancelOpen?.();this.cancelOpen=undefined;clearInterval(this.heartbeat);this.heartbeat=undefined;const task=this.task;this.task=undefined;task?.close({});for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(new Error('连接中断，操作结果未知。'));}this.pending.clear();}
 }

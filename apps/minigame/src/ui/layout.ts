@@ -1,5 +1,5 @@
 export type Rect={x:number;y:number;w:number;h:number};
-export type Node=Rect&{kind:'text'|'box'|'button'|'timer';weight?:number;seconds?:number;progress?:number;text?:string;lines?:string[];size?:number;color?:string;fill?:string;stroke?:string;align?:'left'|'center';radius?:number;enabled?:boolean;action?:()=>void};
+export type Node=Rect&{kind:'text'|'box'|'button'|'timer';lineHeight?:number;field?:string;focused?:boolean;caret?:boolean;baseline?:'middle';weight?:number;seconds?:number;progress?:number;text?:string;lines?:string[];size?:number;color?:string;fill?:string;stroke?:string;align?:'left'|'center';radius?:number;enabled?:boolean;action?:()=>void};
 export const clamp=(n:number,max:number)=>Math.max(0,Math.min(max,n));
 export function contains(r:Rect,x:number,y:number){return x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h;}
 export class Layout {

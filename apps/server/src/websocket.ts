@@ -43,6 +43,7 @@ class NativeConnection implements GameConnection {
       }
       const { requestId, event, data } = request as { requestId: string; event: string; data: unknown };
       const ack = (result: unknown) => this.send({ event: 'ack', requestId, ...result as object });
+      if (event === 'time:sync' && data == null) { const receivedAt=Date.now(); ack({ok:true,data:{receivedAt,sentAt:Date.now()}}); return; }
       if (event === 'ping') { this.alive = true; ack({ ok: true, data: null }); return; }
       if (!validRequest(event, data)) { ack({ ok: false, error: '事件或数据格式无效。' }); return; }
       if (this.seen.has(requestId)) { ack({ ok: false, error: '重复请求，请刷新状态后再操作。' }); return; }

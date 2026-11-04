@@ -2,13 +2,15 @@ import { syncInput, type RoomState, type SessionPayload } from '@word-sync/share
 import { Transport } from '../platform/transport';
 export class GameStore {
   room?:RoomState;session?:SessionPayload;connected=false;restored=false;error='';word='';
-  private listeners=new Set<()=>void>();private generation=0;private background=true;private connecting=false;private retry?:number;private busy=false;private identityAck=false;
+  private listeners=new Set<()=>void>();private generation=0;private background=true;private connecting=false;private retry?:number;private busy=false;private identityAck=false;private freshState=false;
   constructor(readonly transport=new Transport(),private storage=wx){
     const stored=storage.getStorageSync('word-sync-session');
     if(stored&&typeof stored.roomCode==='string'&&typeof stored.playerId==='string'&&typeof stored.reconnectToken==='string')this.session=stored;
-    transport.onState=state=>{if(this.background)return;this.word=syncInput(this.word,this.room,state,this.session?.playerId||'');this.room=state;if(this.identityAck&&state.players.some((p:{id:string})=>p.id===this.session?.playerId))this.restored=true;this.emit();};
+    transport.onState=state=>{if(this.background)return;this.word=syncInput(this.word,this.room,state,this.session?.playerId||'');this.room=state;this.freshState=true;if(this.identityAck&&state.players.some((p:{id:string})=>p.id===this.session?.playerId))this.restored=true;this.emit();};
     transport.onClose=()=>{this.connected=false;this.restored=false;this.emit();this.queue();};
   }
+  get recovering(){return !this.connected||!this.restored||this.background;}
+  get estimatedServerNow(){return this.transport.clock.now();}
   get available(){return this.connected&&this.restored&&!this.background&&!this.busy;}
   get me(){return this.room?.players.find(p=>p.id===this.session?.playerId);}
   get myGroup(){return this.room?.currentGroups.find(g=>g.members.includes(this.session?.playerId||''));}
@@ -22,10 +24,10 @@ export class GameStore {
   async connect(){
     if(this.background||this.connecting||this.connected)return;
     const generation=this.generation;this.connecting=true;clearTimeout(this.retry);
-    try{await this.transport.connect();if(generation!==this.generation)return;this.connected=true;this.identityAck=false;this.room=undefined;this.error='';
+    try{await this.transport.connect();if(generation!==this.generation)return;this.connected=true;this.identityAck=false;this.freshState=false;this.error='';
       if(this.session){try{this.save(await this.transport.request<SessionPayload>('room:reconnect',this.session));}catch(e){if((e as Error).message==='会话已过期。'){this.session=undefined;this.room=undefined;this.storage.removeStorageSync('word-sync-session');}else throw e;}}
       if(generation!==this.generation)return;
-      this.identityAck=true;this.restored=!this.session||!!(this.room as RoomState|undefined)?.players.some(p=>p.id===this.session?.playerId);
+      this.identityAck=true;this.restored=!this.session||this.freshState&&!!(this.room as RoomState|undefined)?.players.some(p=>p.id===this.session?.playerId);
     }catch(e){if(generation!==this.generation)return;this.error=(e as Error).message;this.connected=false;this.restored=false;this.transport.close();this.queue();}
     finally{if(generation===this.generation){this.connecting=false;this.emit();}}
   }
@@ -33,8 +35,9 @@ export class GameStore {
   show(){this.background=false;void this.connect();}
   round(){return {roundId:this.room!.roundId,proposalVersion:this.room!.proposalVersion};}
   async act(event:string,data:unknown=null){
-    if(!this.available)throw new Error('连接或身份恢复中，请稍候。');
     const r=this.room;
+    try{
+    if(!this.available)throw new Error('连接或身份恢复中，请稍候。');
     if(event==='room:create'||event==='room:join'){if(this.session)throw new Error('请先离开当前房间。');}
     else if(!r)throw new Error('尚未进入房间。');
     if(event==='lobby:settings'&&(!this.isOwner||r?.view!=='lobby'))throw new Error('只有大厅房主可以修改设置。');
@@ -48,6 +51,7 @@ export class GameStore {
       if(['group:confirm','group:reject'].includes(event)&&!this.candidate)throw new Error('候选已变化。');
     }
     if(event==='game:rematch'&&r?.view!=='ended')throw new Error('请在结果页返回大厅。');
+    }catch(e){this.error=(e as Error).message;this.emit();throw e;}
     const generation=this.generation;this.busy=true;this.error='';this.emit();
     try{const value=await this.transport.request<SessionPayload|null>(event,data);if(generation!==this.generation)return;
       if(event==='room:create'||event==='room:join'){this.save(value!);if(this.room)this.word=syncInput(this.word,undefined,this.room,value!.playerId);}
