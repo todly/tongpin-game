@@ -1,0 +1,12 @@
+import type { ClientToServerEvents, RoomState } from '@word-sync/shared';
+
+/** 仅负责连接与定向消息，不承载房间业务。 */
+export interface GameConnection {
+  id: string;
+  on<E extends keyof ClientToServerEvents>(event: E, listener: ClientToServerEvents[E]): unknown;
+  on(event: 'disconnect', listener: () => void): unknown;
+  join(room: string): unknown;
+  leave(room: string): unknown;
+  disconnect(close?: boolean): unknown;
+  emit(event: 'room:state', state: RoomState): unknown;
+}

@@ -1,0 +1,4 @@
+{
+ "pages":[{"path":"pages/index/index","style":{"navigationBarTitleText":"同频词","enableShareAppMessage":true}}],
+ "globalStyle":{"navigationBarTextStyle":"white","navigationBarBackgroundColor":"#202133","backgroundColor":"#202133"}
+}

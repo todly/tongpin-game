@@ -10,7 +10,17 @@ artifacts/
 unpackage/
 *.log
 *.tsbuildinfo
+.idea/
+/project.config.json
 project.private.config.json
+config.local.json
+config.local.*
+*.cer
+*.der
+*.p7b
+*.p7c
+*.jks
+*.keystore
 *.pem
 *.key
 *.p12

@@ -1,0 +1,7 @@
+{
+  "appid": "",
+  "mode": "cloud",
+  "env": "",
+  "service": "",
+  "localUrl": "ws://localhost:3000/ws"
+}

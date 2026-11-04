@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents } from '@word-sync/shared';
 import { GameService } from './game.js';
+import { attachWebSocket, validRequest } from './websocket.js';
 
 export function createApp() {
   const app = express();
@@ -18,8 +19,18 @@ export function createApp() {
   app.get('*', (_request, response) => response.sendFile(path.join(webDist, 'index.html')));
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, { cors: { origin: origins } });
   const game = new GameService(io);
-  io.on('connection', (socket) => game.bind(socket));
-  return { app, httpServer, io, game };
+  io.on('connection', (socket) => {
+    socket.use(([event, ...args], next) => {
+      const data = event === 'room:leave' ? null : args[0];
+      if (validRequest(event, data)) return next();
+      const ack = args.at(-1);
+      if (typeof ack === 'function') ack({ ok: false, error: '事件或数据格式无效。' });
+      next(new Error('无效请求。'));
+    });
+    game.bind(socket);
+  });
+  const wss = attachWebSocket(httpServer, game);
+  return { app, httpServer, io, game, wss };
 }
 
 if (process.env.NODE_ENV !== 'test') {

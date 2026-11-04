@@ -1,0 +1,24 @@
+import { describe,it,expect,vi,afterEach } from 'vitest';
+import { Transport } from '../src/platform/transport';
+import { GameStore } from '../src/stores/game';
+import { Keyboard } from '../src/ui/keyboard';
+import { reportPages,wrapText } from '../src/utils/report';
+import { syncInput } from '@word-sync/shared';
+afterEach(()=>vi.useRealTimers());
+const config={appid:'',mode:'local' as const,env:'',service:'',localUrl:'ws://localhost/ws'};
+function task(){const callbacks:any={};return {callbacks,onOpen:(f:any)=>callbacks.open=f,onMessage:(f:any)=>callbacks.message=f,onClose:(f:any)=>callbacks.close=f,onError:(f:any)=>callbacks.error=f,send:vi.fn(),close:vi.fn()};}
+function storage(session?:any){return {getStorageSync:()=>session,setStorageSync:vi.fn(),removeStorageSync:vi.fn()};}
+const session={roomCode:'ABCDEF',playerId:'p',reconnectToken:'私密令牌'};
+const room=()=>({view:'writing',phase:'writing',roundId:'r',proposalVersion:0,players:[{id:'p',nickname:'苹果',colorId:0}],proposals:[],currentGroups:[],submittedPlayerIds:[],history:[],currentFeed:[]}) as any;
+describe('原生传输与生命周期',()=>{
+ it('隐藏取消连接与未知ACK，不重放写操作',async()=>{const t=task(),transport=new Transport(config,{connectSocket:()=>t});const opening=transport.connect();t.callbacks.open();await opening;const request=transport.request('game:submit',{});transport.close();await expect(request).rejects.toThrow('结果未知');t.callbacks.message({data:JSON.stringify({event:'ack',requestId:'1-1',ok:true})});expect(t.send).toHaveBeenCalledTimes(1);});
+ it('迟到的云连接被关闭',async()=>{let finish:any;const t=task();const transport=new Transport({...config,mode:'cloud',env:'测试环境',service:'测试服务'},{cloud:{init:vi.fn(),connectContainer:()=>new Promise(r=>finish=r)}});const promise=transport.connect();transport.close();finish({socketTask:t});await expect(promise).rejects.toThrow('取消');expect(t.close).toHaveBeenCalled();});
+ it('缺云配置给出中文错误',async()=>{await expect(new Transport({...config,mode:'cloud'},{}).connect()).rejects.toThrow('真实微信云环境');});
+ it('隐藏保留令牌取消重试，显示等待新定向状态及ACK',async()=>{vi.useFakeTimers();const transport:any={connect:vi.fn(async()=>{}),close:vi.fn(),request:vi.fn(async()=>session)};const saved=storage(session);const game=new GameStore(transport,saved);game.show();await vi.waitFor(()=>expect(transport.request).toHaveBeenCalled());expect(game.available).toBe(false);transport.onState(room());expect(game.available).toBe(true);game.hide();transport.onClose();await vi.advanceTimersByTimeAsync(5000);expect(transport.connect).toHaveBeenCalledTimes(1);expect(saved.removeStorageSync).not.toHaveBeenCalled();game.show();await vi.waitFor(()=>expect(transport.request).toHaveBeenCalledTimes(2));await Promise.resolve();expect(game.available).toBe(false);transport.onState({...room(),view:'lobby'});expect(game.available).toBe(true);game.hide();});
+ it('隐藏后旧连接成功不能打开操作闸门',async()=>{let finish:any;const transport:any={connect:()=>new Promise(r=>finish=r),close:vi.fn(),request:vi.fn()};const game=new GameStore(transport,storage(session));game.show();game.hide();finish();await Promise.resolve();expect(game.available).toBe(false);expect(transport.request).not.toHaveBeenCalled();});
+});
+describe('输入及分页',()=>{
+ it('候选锁定、否决清除、其他组不清草稿',()=>{const previous=room();expect(syncInput('草稿',previous,{...previous,proposals:[{memberIds:['另一个人'],word:'其他词'}]},'p')).toBe('草稿');const candidate={...previous,proposals:[{memberIds:['p'],word:'候选词'}]};expect(syncInput('草稿',previous,candidate,'p')).toBe('候选词');expect(syncInput('候选词',candidate,previous,'p')).toBe('');});
+ it.each(['nickname','code','word','chat'] as const)('%s键盘旧代次回调失效',kind=>{let callback:any;const api:any={hideKeyboard:vi.fn(),showKeyboard:vi.fn(),onKeyboardInput:(f:any)=>callback=f,onKeyboardConfirm:vi.fn(),onKeyboardComplete:vi.fn(),offKeyboardInput:vi.fn(),offKeyboardConfirm:vi.fn(),offKeyboardComplete:vi.fn()};const keyboard=new Keyboard(api),change=vi.fn();keyboard.open(kind,'',()=>true,change);const old=callback;keyboard.close();old({value:'旧输入'});expect(change).not.toHaveBeenCalled();keyboard.open(kind,'',()=>false,change);callback({value:'过期回合'});expect(change).not.toHaveBeenCalled();});
+ it('默认不导出日志且多页不丢最后一轮',()=>{const r=room();r.history=Array.from({length:30},(_,i)=>({round:i+1,submissions:[{nickname:'苹果',word:'第'+i+'词',colorId:0}],feed:[{id:String(i),kind:'chat',nickname:'苹果',text:'私密日志',createdAt:i,colorId:0}]}));const pages=reportPages(r,false,s=>s.length*24);expect(pages.length).toBeGreaterThan(1);expect(JSON.stringify(pages)).not.toContain('私密日志');expect(JSON.stringify(pages)).toContain('第29词');expect(JSON.stringify(reportPages(r,true,s=>s.length*24))).toContain('私密日志');expect(wrapText('中文长句',s=>s.length*24,48)).toEqual(['中文','长句']);});
+});

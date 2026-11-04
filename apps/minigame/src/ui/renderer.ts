@@ -1,0 +1,9 @@
+import {contains,type Node,type Rect} from './layout';
+export function rounded(ctx:any,r:Rect,radius:number){const {x,y,w,h}=r,t=Math.min(radius,w/2,h/2);ctx.beginPath();ctx.moveTo(x+t,y);ctx.arcTo(x+w,y,x+w,y+h,t);ctx.arcTo(x+w,y+h,x,y+h,t);ctx.arcTo(x,y+h,x,y,t);ctx.arcTo(x,y,x+w,y,t);ctx.closePath();}
+export function render(ctx:any,nodes:Node[],offset=0){for(const node of nodes){const n={...node,y:node.y+offset};ctx.save();ctx.textBaseline='top';ctx.font=`${n.weight|| (n.kind==='button'?600:400)} ${n.size||15}px sans-serif`;ctx.globalAlpha=n.enabled===false?.55:1;
+ if(n.kind==='box'||n.kind==='button'){rounded(ctx,n,n.radius||13);ctx.fillStyle=n.fill;ctx.fill();if(n.stroke){ctx.strokeStyle=n.stroke;ctx.lineWidth=1;ctx.stroke();}}
+ ctx.fillStyle=n.color||'#f6f2eb';if(n.kind==='text'){ctx.textAlign=n.align||'left';n.lines?.forEach((s,i)=>ctx.fillText(s,n.align==='center'?n.x+n.w/2:n.x,n.y+i*((n.size||15)+5)));}
+ if(n.kind==='button'){ctx.textAlign='center';let text=n.text||'';while(text.length&&ctx.measureText(text).width>n.w-20)text=text.slice(0,-1);if(text!==n.text)text=text.slice(0,-1)+'…';ctx.fillText(text,n.x+n.w/2,n.y+(n.h-(n.size||15))/2);}
+ if(n.kind==='timer'){const cx=n.x+n.w/2,cy=n.y+44;ctx.lineWidth=3;ctx.strokeStyle='#36334f';ctx.beginPath();ctx.arc(cx,cy,41,0,Math.PI*2);ctx.stroke();ctx.strokeStyle=n.color;ctx.lineCap='round';ctx.beginPath();ctx.arc(cx,cy,41,-Math.PI/2,-Math.PI/2+Math.PI*2*(n.progress||0));ctx.stroke();ctx.textAlign='center';ctx.font='600 28px sans-serif';ctx.fillText(String(n.seconds||0),cx,n.y+18);ctx.font='11px sans-serif';ctx.fillStyle='#b8bbce';ctx.fillText('剩余秒数',cx,n.y+53);}
+ ctx.restore();}}
+export function hit(nodes:Node[],x:number,y:number,offset=0){return [...nodes].reverse().find(n=>n.action&&n.enabled!==false&&contains({...n,y:n.y+offset},x,y));}

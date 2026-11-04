@@ -1,5 +1,68 @@
 # 同频脑电波
 
+## 微信小游戏（原生 Canvas）
+
+小游戏账号请使用 `apps/minigame`，不要导入 uni-app 小程序产物。客户端为普通 TypeScript、esbuild 和原生 `wx` Canvas，无 DOM、Vue、uni 或 Node 运行依赖；复用 shared 的类型、inputSync、timeline 和现有 `/ws`，后端规则不复制。昵称、词语、房间码、聊天使用原生键盘；历史及聊天上下滑动，同组只有外框，不显示小组标签和提交勾角标。
+
+```bash
+pnpm install --frozen-lockfile
+pnpm --filter @word-sync/shared build
+cp apps/minigame/config.example.json apps/minigame/config.local.json
+# 本地调试：config.local.json 中 mode 改为 local
+pnpm --filter @word-sync/server dev
+pnpm --filter @word-sync/minigame dev
+# 普通构建（默认云配置为空，运行会给出中文提示）
+pnpm --filter @word-sync/minigame build
+pnpm --filter @word-sync/minigame checkbundle
+# 上传前严格构建：必须填真实 AppID、env、service 且 mode=cloud
+pnpm --filter @word-sync/minigame build:production
+```
+
+开发者工具导入 **`apps/minigame/dist`**，该目录生成 `game.js`、`game.json`、`project.config.json`，`compileType=game`。根目录的项目配置和私有配置不会被覆盖。`config.local.json` 填本人有权限的真实小游戏 `appid`、云环境 `env`、服务 `service`，示例故意全部留空、不编造；本地 `localUrl` 默认 `ws://localhost:3000/ws`，手机不能使用自己的 localhost。上传模式禁止本地配置。不要提交私有配置或令牌。
+
+云托管部署沿用下节单实例及 `/ws` 网关要求，不自动开通、收费、部署或上传。使用真实小游戏账号在开发工具导入产物，检查云连接、Canvas 安全区/DPR、四类键盘、滚动、前后台恢复和相册授权；通过后手动上传，在小游戏管理后台设置体验版、添加体验成员并扫码。工具基础库需支持 `wx.cloud.connectContainer`，环境和服务访问权限需由账号拥有者配置。服务重启清房及清令牌，不能将构建通过当成云部署或真机通过。
+
+恢复令牌仅存 `wx` storage。隐藏立即关闭连接、取消重试及键盘，保留令牌；显示重新连接且等待恢复 ACK 和新的个人定向状态才允许写操作。旧连接/ACK/键盘代次失效，不自动重放结果未知的操作。邀请分享使用小游戏 `query=roomCode=...`，没有小程序 page path 或令牌。纪念图默认仅含全部回合词，明确勾选授权后才加入本人可见日志；生成不自动预览/保存，须用户主动操作，相册取消及拒绝有中文提示。
+
+验证命令：`pnpm test`、`pnpm typecheck`、`pnpm build` 及上述小游戏 build/checkbundle。`node scripts/minigame-runtime-verify.mjs` 将完整 game.js 在模拟 wx Canvas、原生键盘和 SocketTask 中运行，触摸驱动创建、作答、混合对局、个人返房、隐藏恢复和分享；证据 `artifacts/小游戏运行验证.json`。`node scripts/mixed-runtime-verify.mjs` 进一步覆盖三人私密历史、永久合组、候选否决/超时、5 秒推进、跨传输接管与个人视图。模拟 wx 不代表微信真实渲染或设备验收；未提供真实 AppID/env/service，云、体验版和真机未验收。本次实际尝试 CLI 导入，被“工具的服务端口已关闭”阻止；未修改安全设置。未完成微信开发工具内渲染、云连接、体验版上传、真机安全区/键盘/相册验收。
+
+## 微信小程序体验版
+
+网页版保持在 `apps/web`；新增 `apps/miniprogram` 使用 Vue 3.4.21、Pinia、TypeScript 与统一锁定的 DCloud Vue3 工具链，Vite 5.2.8 独立于网页版。首页、大厅、作答、揭晓、结果和历史在同一个原生页面内按服务器个人 `view` 切换，不使用网页路由或 DOM。
+
+### 本地小程序开发
+
+```bash
+pnpm install --frozen-lockfile
+pnpm --filter @word-sync/shared build
+cp apps/miniprogram/.env.example apps/miniprogram/.env.local
+pnpm --filter @word-sync/server dev
+pnpm --filter @word-sync/miniprogram dev:mp-weixin
+# 或生产产物
+pnpm --filter @word-sync/miniprogram build:mp-weixin
+```
+
+在微信开发者工具导入 `apps/miniprogram/dist/dev/mp-weixin`（开发）或 `apps/miniprogram/dist/build/mp-weixin`（生产）。`src/manifest.json` 的 `mp-weixin.appid` 必须填写自己拥有权限的真实小程序 AppID，仓库刻意留空。模拟器本地连接为 `ws://localhost:3000/ws`；真机需改为可访问的局域网地址或已登记的 WSS 地址，不能使用手机自己的 localhost。仅本地调试可按开发工具要求关闭域名检查，生产不能依赖此设置。
+
+### 微信云托管与体验成员
+
+本项目不会自动开通资源、上传或部署。用户确认费用后在自己的微信小程序账号下执行：
+
+1. 在微信开发者工具或微信云托管控制台开通关联的小程序云环境，记下真实环境 ID；创建服务并记下真实服务名。确认小程序拥有该环境访问权限，跨环境使用需单独授权。
+2. 以仓库根目录作为 Docker 构建上下文，Dockerfile 路径为根目录 `Dockerfile`。构建和部署后配置监听端口 `3000`，环境变量 `PORT=3000`、`NODE_ENV=production`；健康探测为 HTTP `/health`。云托管网关必须支持 WebSocket 升级及长连接，原生端点 `/ws`、网页 `/socket.io/` 和网页静态文件共用同一端口。
+3. **实例数固定为一个，保持最小实例数一个并避免缩容到零。** 本服务只在进程内存保存房间，多副本会分裂房间；重启、更新、实例迁移均使房间和令牌失效。会话亲和本身不提供持久化保障。首次部署先通过健康探测和两端混合对局确认网关行为。
+4. 在 `apps/miniprogram/.env.local` 设置 `VITE_CONNECTION_MODE=cloud`，填写 `VITE_CLOUD_ENV` 和 `VITE_CLOUD_SERVICE`；在 manifest 填真实 AppID。这三个值是部署标识，不是秘密。客户端执行 `wx.cloud.init` 后以 `wx.cloud.connectContainer({config:{env},service,path:'/ws'})` 建立连接，不拼接或分享身份令牌。不要提交私有配置或账户密钥。
+5. 执行生产小程序构建，开发者工具导入 `dist/build/mp-weixin`，选择真实 AppID 和有权限的开发者账号。检查控制台、首页、Canvas 多页图片、相册授权、前后台切换及离线恢复。开发者工具基础库需支持云托管 `connectContainer`；不支持时升级工具与基础库，不回退为无鉴权公开接口。
+6. 在开发者工具点击“上传”，填中文版本说明。小程序管理后台的“版本管理”将对应开发版本设置为体验版。在“成员管理”添加体验成员；成员扫描后台体验二维码进入。体验版和正式版的域名、云环境授权及隐私配置须独立检查，构建成功不代表微信审核或云连接通过。
+7. 至少用两台设备加一个网页版参与同房，核查准备、锁词、候选同意/否决、超时、合组、个人返房、前后台恢复、分享路径和相册权限。后台挂起不主动离房；前台及网络恢复重连，未恢复身份和定向状态前按钮不可操作。
+
+小程序房间分享仅携带 `roomCode`；恢复令牌只保存在 `uni` 本地存储。请求使用 `{requestId,event,data}`，确认返回 `{event:'ack',requestId,ok,data/error}`，状态独立推送 `{event:'room:state',data}`。确认超时及断线取消悬挂请求，不自动重放未知结果写操作。两传输共用唯一 GameService，实时、历史日志和候选按当时成员裁剪。
+
+结果图默认仅包含全部回合词语；用户明确开启开关后才包含本人可见日志。Canvas 使用测量换行与固定高度分页，每页生成 PNG；预览和主动保存分开，保存取消或权限拒绝有中文说明。房间号、令牌不进入图片。
+
+运行混合真实传输验证：`node scripts/mixed-runtime-verify.mjs`，证据为 `artifacts/混合传输运行验证.json`。本次已完成本机服务器、混合客户端和编译验证；未配置真实 AppID、云环境和服务，本机安装了微信开发者工具，但实际 CLI 导入被“工具的服务端口已关闭”阻止，未修改其安全设置。未完成开发工具导入、云托管连通、Canvas 真机渲染和设备相册验证。不要把本机协议验证当成真机验收。Docker 构建也已实际尝试，但 Docker Hub 匿名令牌请求网络超时，未完成镜像构建与容器运行。
+
+
 一款支持 2–6 人的轻量实时聚会游戏。每位玩家私下提交一个词；揭晓时相同的非空答案自动组成持久同频小组。当揭晓合并后所有有效玩家属于同一个非空小组，或达到回合上限时，游戏结束。
 
 ## 技术栈

@@ -5,7 +5,9 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
-RUN pnpm install --frozen-lockfile
+COPY apps/miniprogram/package.json apps/miniprogram/
+COPY apps/minigame/package.json apps/minigame/
+RUN pnpm install --frozen-lockfile --filter @word-sync/server... --filter @word-sync/web...
 COPY . .
 RUN pnpm build
 
