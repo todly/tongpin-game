@@ -8,7 +8,7 @@ function logsVisible(logs:boolean|RoundLogs,round:number){return typeof logs==='
 
 function eventParts(item:RoundHistory['feed'][number]){
  const value=formatEvent(item);
- if(item.kind==='merge'&&item.names)return [...item.names.flatMap((name,index)=>[{text:index?'、':'',color:muted},{text:name.nickname,color:playerColor(name.colorId)}]),{text:'想到了一起，组成同频小组',color:'#c6cedd'}];
+ if(item.kind==='merge'&&item.names)return [...item.names.flatMap((name,index)=>[{text:index?'、':'',color:muted},{text:name.nickname,color:playerColor(name.colorId)}]),{text:'达成同频',color:'#c6cedd'}];
  if(value.startsWith(item.nickname))return [{text:item.nickname,color:playerColor(item.colorId)},{text:value.slice(item.nickname.length),color:'#c6cedd'}];
  return [{text:value,color:'#c6cedd'}];
 }
@@ -22,10 +22,17 @@ export function historyLayout(l:Layout,room:RoomState,logs:boolean|RoundLogs,onT
   l.box(badgeY,26,l.inset,badgeW,'#d8ff72','',13);
   l.y=badgeY;l.text(`第 ${round.round} 回合`,11,'#17191f',l.inset,badgeW,'center',600,0);Object.assign(l.nodes[l.nodes.length-1]!,{y:badgeY,h:26,baseline:'middle'});l.y=badgeY+26+12;
   for(const submission of round.submissions){
-   const rowY=l.y,nameWidth=Math.min(150,Math.max(64,l.contentWidth*.32));
-   l.text(submission.nickname,13,playerColor(submission.colorId),l.inset,nameWidth,'left',600,0);
-   l.y=rowY;l.text(submission.timedOut?'':submission.word||'',20,submission.timedOut?'#7d869f':'#eee8ff',l.inset+nameWidth+12,l.contentWidth-nameWidth-12,'left',600,0);
-   l.y=Math.max(...l.nodes.slice(-2).map(node=>node.y+node.h))+9;
+   const rowY=l.y,rowX=l.inset,rowW=l.contentWidth,paddingX=9,paddingY=8,accent=playerColor(submission.colorId),contentX=rowX+paddingX,contentW=rowW-paddingX*2;
+   const nicknameSize=12,wordSize=15,nicknameW=Math.min(128,Math.max(54,l.measure(submission.nickname,nicknameSize,600).width)),word=submission.timedOut?'未作答':submission.word||'空白',wordColor=submission.timedOut||!submission.word?'#888ba3':'#eee8ff';
+   const sameLine=contentW-nicknameW-10>=Math.max(70,Math.min(l.measure(word,wordSize,600).width,contentW*.54));
+   l.y=rowY+paddingY;l.text(submission.nickname,nicknameSize,accent,contentX,sameLine?nicknameW:contentW,'left',600,0);
+   const nameNode=l.nodes[l.nodes.length-1]!;
+   l.y=sameLine?rowY+paddingY:rowY+paddingY+nameNode.h+5;
+   l.text(word,wordSize,wordColor,sameLine?contentX+nicknameW+10:contentX,sameLine?contentW-nicknameW-10:contentW,'left',600,0);
+   const wordNode=l.nodes[l.nodes.length-1]!,bottom=Math.max(nameNode.y+nameNode.h,wordNode.y+wordNode.h),rowH=bottom-rowY+paddingY;
+   if(sameLine){Object.assign(nameNode,{y:rowY,h:rowH,baseline:'middle'});Object.assign(wordNode,{y:rowY,h:rowH,baseline:'middle'});}
+   l.nodes.splice(l.nodes.length-2,0,{kind:'box',x:rowX,y:rowY,w:rowW,h:rowH,fill:'#292b43',radius:10});
+   l.y=rowY+rowH+8;
   }
   if(open&&round.feed.length){
    l.y+=4;l.box(l.y,1,l.inset,l.contentWidth,'#403957','',0);l.y+=12;
