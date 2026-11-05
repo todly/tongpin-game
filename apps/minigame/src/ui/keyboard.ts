@@ -7,6 +7,13 @@ export class Keyboard {
   constructor(private api=wx,private redraw=()=>{}){}
   close(){this.pending=undefined;this.hide();}
   confirm(){this.close();}
+  clear(kind:InputKind){
+    if(this.kind!==kind||!this.current)return;
+    this.draft='';
+    this.current.change('');
+    try{this.api.updateKeyboard?.({value:''});}catch{}
+    this.redraw();
+  }
   open(kind:InputKind,value:string,valid:()=>boolean,change:(v:string)=>void){
     this.pending={kind,value,valid,change};
     if(this.state==='idle')this.show();else this.hide();
