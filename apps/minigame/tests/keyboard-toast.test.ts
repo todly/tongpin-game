@@ -6,3 +6,14 @@ function native(){const events=new Map<string,Set<any>>();let hide:any;const api
 it('真正全局尾事件在hide成功及同轮排空前不可写，ABC只开C',()=>{vi.useFakeTimers();const n=native(),k=new Keyboard(n.api),a=vi.fn(),b=vi.fn(),c=vi.fn();k.open('nickname','A',()=>true,a);n.emit('Input','系统中文🙂');expect(a).toHaveBeenLastCalledWith('系统中文🙂');k.open('code','B',()=>true,b);k.open('chat','C',()=>true,c);for(const e of ['Input','Confirm','Complete'])n.emit(e);n.finish();for(const e of ['Input','Confirm','Complete'])n.emit(e);expect(n.api.showKeyboard).toHaveBeenCalledTimes(1);vi.advanceTimersByTime(0);expect(n.api.showKeyboard).toHaveBeenCalledTimes(2);expect(n.api.showKeyboard.mock.calls[1][0].defaultValue).toBe('C');expect(b).not.toHaveBeenCalled();expect(c).not.toHaveBeenCalled();n.emit('Input','真实C');expect(c).toHaveBeenCalledWith('真实C');});
 it('后台close取消待开；hide失败超时及throw不死锁',()=>{vi.useFakeTimers();const n=native(),k=new Keyboard(n.api);k.open('nickname','A',()=>true,vi.fn());k.open('code','B',()=>true,vi.fn());k.close();n.finish();vi.runAllTimers();expect(k.state).toBe('idle');k.open('chat','C',()=>true,vi.fn());k.open('word','D',()=>true,vi.fn());vi.runAllTimers();expect(k.state).toBe('idle');n.api.showKeyboard.mockImplementation(()=>{throw Error('show');});n.api.hideKeyboard.mockImplementation(()=>{throw Error('hide');});k.open('nickname','E',()=>true,vi.fn());vi.runAllTimers();expect(k.state).toBe('idle');});
 it('Toast五秒固定到期，残留错误不重弹，新事件可替换',()=>{let now=0;const t=new Toast(()=>now);t.observeError('失败');now=4000;t.observeError('失败');t.push('失败',true);now=5000;expect(t.visible()).toBe('');t.observeError('失败');expect(t.visible()).toBe('');t.push('已复制');expect(t.visible()).toBe('已复制');now=10000;expect(t.visible()).toBe('');t.observeError('');t.observeError('失败');expect(t.visible()).toBe('失败');});
+
+it('showKeyboard成功前的高度事件生效，旧键盘高度事件不能抬起新底栏',()=>{
+ vi.useFakeTimers();let height:(event:{height:number})=>void=()=>{};let ready:()=>void=()=>{};
+ const n=native();n.api.showKeyboard=vi.fn(o=>{ready=o.success;});
+ n.api.onKeyboardHeightChange=(fn:typeof height)=>{height=fn;};
+ n.api.offKeyboardHeightChange=vi.fn();
+ const k=new Keyboard(n.api);k.open('word','',()=>true,vi.fn());
+ height({height:300});expect(k.height).toBe(300);
+ ready();expect(k.height).toBe(300);
+ const stale=height;k.close();stale({height:400});expect(k.height).toBe(0);
+});

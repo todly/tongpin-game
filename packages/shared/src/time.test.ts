@@ -19,6 +19,23 @@ describe('共享安全时钟', () => {
     expect(clock.now()).toBeCloseTo(1, 5);
   });
 
+  it.each([1, .001, 1000])('初始化连续采样不锁错单位 %s', multiplier => {
+    let raw = 0, wall = 10_000;
+    const clock = new SafeMonotonic(() => raw, { wall: () => wall });
+    clock.now(); raw += .1 * multiplier; clock.now();
+    for (let i = 0; i < 8; i++) {
+      raw += 250 * multiplier; wall += 250;
+      expect(clock.now()).toBeCloseTo((i + 1) * 250);
+    }
+  });
+
+  it('原生时钟暂时停住时仍按墙钟推进，恢复后继续计时', () => {
+    let raw = 0, wall = 10_000;
+    const clock = new SafeMonotonic(() => raw, { wall: () => wall });
+    wall += 250; expect(clock.now()).toBe(250);
+    raw += .25; wall += 250; expect(clock.now()).toBe(500);
+  });
+
   it('NaN、负向和跳变时采用连续 wall delta，并对诊断限流', () => {
     let raw = 100, wall = 1000; const events:string[]=[];
     const clock = new SafeMonotonic(() => raw, { wall: () => wall, debug: true, diagnose: e => events.push(e.reason) });
