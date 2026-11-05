@@ -1,5 +1,7 @@
 export { orderedTimeline, formatEvent } from './timeline.js';
 export { syncInput } from './inputSync.js';
+export { normalizeEpoch, SafeMonotonic, StateCountdown } from './time.js';
+export type { ClockDiagnostic, EpochValue, SafeMonotonicOptions } from './time.js';
 export const MIN_PLAYERS=2, MAX_PLAYERS=6, DEFAULT_TIMER=60, DEFAULT_MAX_ROUNDS=10, MIN_TIMER=10, MAX_TIMER=180, MIN_ROUNDS=1, MAX_ROUNDS=30;
 export type RoomPhase='lobby'|'writing'|'reveal'|'ended';
 export interface Settings{timerSeconds:number;maxRounds:number}
@@ -13,7 +15,7 @@ export interface FeedItem{colorId:ColorId;names?:{nickname:string;colorId:ColorI
 export interface GroupProposal{id:string;roundId:string;version:number;groupId?:string;proposerId:string;memberIds:string[];word:string;confirmations:string[];createdAt:number}
 export interface ProposalDecision{proposal:GroupProposal;status:'approved'|'rejected'|'invalidated';decidedBy?:string;decidedAt:number}
 export interface RoundHistory{round:number;roundId:string;submissions:Submission[];groups:Group[];feed:FeedItem[];proposals:ProposalDecision[];entities:Player[];proposalSnapshots:GroupProposal[];mergeBefore:Group[];mergeAfter:Group[];result:{endReason?:'all-same'|'max-rounds';winnerWord?:string};startedAt:number;endedAt:number;revealReason:'all-submitted'|'timeout'}
-export interface RoomState{view:RoomPhase;gameId:string;code:string;ownerId:string;phase:RoomPhase;players:Player[];settings:Settings;round:number;roundId:string;proposalVersion:number;deadline:number|null;nextRoundAt:number|null;lockedWord?:string;submittedPlayerIds:string[];currentGroups:Group[];proposals:GroupProposal[];visibleSubmissions:Submission[];currentFeed:FeedItem[];history:RoundHistory[];endReason?:'all-same'|'max-rounds';winnerWord?:string}
+export interface RoomState{view:RoomPhase;gameId:string;code:string;ownerId:string;phase:RoomPhase;players:Player[];settings:Settings;round:number;roundId:string;proposalVersion:number;serverNow?:number;deadline:number|null;nextRoundAt:number|null;lockedWord?:string;submittedPlayerIds:string[];currentGroups:Group[];proposals:GroupProposal[];visibleSubmissions:Submission[];currentFeed:FeedItem[];history:RoundHistory[];endReason?:'all-same'|'max-rounds';winnerWord?:string}
 export interface SessionPayload{roomCode:string;playerId:string;reconnectToken:string}
 export type RoundRef={roundId:string;proposalVersion:number};
 export type TimeSyncRequest=null;

@@ -1,7 +1,8 @@
 import type { TimeSyncResponse } from '@word-sync/shared';
-import { ServerClock } from './clock';
+import { RoomCountdown, ServerClock } from './clock';
 export class Transport {
   readonly clock=new ServerClock();
+  readonly countdown=new RoomCountdown(()=>this.clock.tick());
   private calibration?:number;
   private async calibrate(generation:number){const sent=this.clock.tick();try{const value=await this.request<TimeSyncResponse>('time:sync',null);if(generation===this.generation)this.clock.sample(sent,this.clock.tick(),value);}catch{/* Older servers may reject read-only clock requests. */}}
   private task:any;

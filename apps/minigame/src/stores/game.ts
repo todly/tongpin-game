@@ -6,11 +6,12 @@ export class GameStore {
   constructor(readonly transport=new Transport(),private storage=wx){
     const stored=storage.getStorageSync('word-sync-session');
     if(stored&&typeof stored.roomCode==='string'&&typeof stored.playerId==='string'&&typeof stored.reconnectToken==='string')this.session=stored;
-    transport.onState=state=>{if(this.background)return;this.word=syncInput(this.word,this.room,state,this.session?.playerId||'');this.room=state;this.freshState=true;if(this.identityAck&&state.players.some((p:{id:string})=>p.id===this.session?.playerId))this.restored=true;this.emit();};
+    transport.onState=state=>{if(this.background)return;this.word=syncInput(this.word,this.room,state,this.session?.playerId||'');this.transport.countdown?.anchor(state,this.transport.clock.now());this.room=state;this.freshState=true;if(this.identityAck&&state.players.some((p:{id:string})=>p.id===this.session?.playerId))this.restored=true;this.emit();};
     transport.onClose=()=>{this.connected=false;this.restored=false;this.emit();this.queue();};
   }
   get recovering(){return !this.connected||!this.restored||this.background;}
   get estimatedServerNow(){return this.transport.clock.now();}
+  remaining(kind:'writing'|'reveal'){return this.transport.countdown?.remaining(kind);}
   get available(){return this.connected&&this.restored&&!this.background&&!this.busy;}
   get me(){return this.room?.players.find(p=>p.id===this.session?.playerId);}
   get myGroup(){return this.room?.currentGroups.find(g=>g.members.includes(this.session?.playerId||''));}

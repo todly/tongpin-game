@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, onUnmounted, ref, watch } from 'vue';
 import { onLoad, onShareAppMessage } from '@dcloudio/uni-app';
-import { playerColor, formatEvent, orderedTimeline, randomNickname, syncInput } from '@word-sync/shared';
+import { playerColor, formatEvent, orderedTimeline, randomNickname, syncInput, SafeMonotonic, StateCountdown } from '@word-sync/shared';
 import { useGameStore } from '../../stores/game';
 import { exportReport } from '../../utils/report';
-const game = useGameStore(), nickname = ref(randomNickname()), code = ref(''), word = ref(''), chat = ref(''), history = ref(false), logs = ref(false), exporting = ref(false), files = ref<string[]>([]), message = ref(''), now = ref(Date.now());
+const game = useGameStore(), nickname = ref(randomNickname()), code = ref(''), word = ref(''), chat = ref(''), history = ref(false), logs = ref(false), exporting = ref(false), files = ref<string[]>([]), message = ref(''), tick = ref(0);
+const performanceClock = (globalThis as any).wx?.getPerformance?.();
+const monotonic = new SafeMonotonic(() => performanceClock?.now?.() ?? Date.now());
+const countdown = new StateCountdown(() => monotonic.now());
 const owner = getCurrentInstance()!.proxy;
-const clock = setInterval(() => { now.value = Date.now(); }, 250); onUnmounted(() => clearInterval(clock));
+const clock = setInterval(() => { tick.value++; }, 250); onUnmounted(() => clearInterval(clock));
 onLoad(query => { code.value = typeof query?.roomCode === 'string' ? query.roomCode.slice(0, 6).toUpperCase() : ''; });
 onShareAppMessage(() => ({ title: '来同频词，看看我们能否想到一起', path: '/pages/index/index' + (game.room ? `?roomCode=${encodeURIComponent(game.room.code)}` : '') }));
 watch(() => game.me?.nickname, value => { if (value) nickname.value = value; });
-watch(() => game.room, (room, previous) => { if (room) word.value = syncInput(word.value, previous, room, game.session?.playerId || ''); if (room?.roundId !== previous?.roundId) { chat.value = ''; history.value = false; } });
+watch(() => game.room, (room, previous) => { if (room) { word.value = syncInput(word.value, previous, room, game.session?.playerId || ''); countdown.anchor(room); } if (room?.roundId !== previous?.roundId) { chat.value = ''; history.value = false; } });
 const submitted = computed(() => game.room?.submittedPlayerIds.includes(game.me?.id || ''));
-const seconds = computed(() => Math.max(0, Math.ceil(((game.room?.deadline || game.room?.nextRoundAt || now.value) - now.value) / 1000)));
+const seconds = computed(() => { void tick.value; const remaining = countdown.remaining(game.room?.view === 'reveal' ? 'reveal' : 'writing'); return remaining === undefined ? undefined : Math.max(0, Math.ceil(remaining / 1000)); });
 async function act(event: string, data: unknown = null) { try { await game.act(event, data); } catch {} }
 async function sendChat() { if (!chat.value.trim()) return; try { await game.act('group:chat', { ...game.round(), text: chat.value }); chat.value = ''; } catch {} }
 async function shareImage() {
@@ -62,7 +65,7 @@ async function saveImages() {
       <text class="hint">全员在线、返回大厅并准备后自动开始。</text>
     </template>
     <template v-else-if="game.room.view === 'writing'">
-      <text class="title">第 {{ game.room.round }} 回合 · {{ seconds }} 秒</text>
+      <text class="title">第 {{ game.room.round }} 回合<template v-if="seconds !== undefined"> · {{ seconds }} 秒</template></text>
       <text>{{ game.myGroup ? '提议一个小组候选词' : '写下你觉得其他人也会写的词' }}</text>
       <input v-model="word" maxlength="40" :disabled="submitted || !game.available || !!game.room.proposals.length" placeholder="相信你的直觉" />
       <button :disabled="submitted || !game.available || !!game.room.proposals.length" @click="act(game.myGroup ? 'group:propose' : 'game:submit', { ...game.round(), word })">{{ submitted ? '已锁定' : game.myGroup ? '提出候选词' : '锁定这个词' }}</button>
@@ -75,7 +78,7 @@ async function saveImages() {
     <template v-else>
       <text class="title">{{ game.room.view === 'reveal' ? '本轮揭晓' : game.room.endReason === 'all-same' ? '完美同频' : '游戏结束' }}</text>
       <view v-for="entry in game.room.visibleSubmissions" :key="entry.playerId" class="card"><text :style="{ color: playerColor(entry.colorId) }">{{ entry.nickname }}：{{ entry.timedOut ? '时间到' : entry.word || '空白' }}</text></view>
-      <text v-if="game.room.view === 'reveal'" class="hint">{{ seconds }} 秒后自动进入下一回合。</text>
+      <text v-if="game.room.view === 'reveal' && seconds !== undefined" class="hint">{{ seconds }} 秒后自动进入下一回合。</text>
       <template v-else><text class="title">{{ game.room.winnerWord }}</text><button :disabled="!game.available" @click="act('game:rematch', { gameId: game.room.gameId })">再玩一次（仅自己返回大厅）</button><view class="row"><switch :checked="logs" :disabled="exporting" @change="toggleLogs" /><text>授权图片包含本人可见日志</text></view><button :disabled="exporting" @click="shareImage">{{ exporting ? '生成中' : '生成本局游戏记录图' }}</button><button v-if="files.length" @click="preview">预览分页图片</button><button v-if="files.length" @click="saveImages">保存全部图片到相册</button><button v-if="files.length" @click="openSettings">相册权限设置</button><text class="hint">{{ message }}</text></template>
     </template>
   </template>
