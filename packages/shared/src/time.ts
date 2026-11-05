@@ -63,7 +63,11 @@ export class SafeMonotonic {
 
   private selectDelta(rawDelta: number, wallDelta: number): number | undefined {
     if (!Number.isFinite(rawDelta) || rawDelta < 0) return undefined;
-    const scales = this.scale ? [this.scale] : (wallDelta === 0 ? [1] : [1, 1000, 0.001]);
+    // Back-to-back reads cannot identify a unit; a stalled platform clock must
+    // also not freeze the countdown or lock a scale from an empty sample.
+    if (rawDelta === 0) return wallDelta;
+    if (this.scale === undefined && wallDelta === 0) return 0;
+    const scales = this.scale ? [this.scale] : [1, 1000, 0.001];
     let best: { scale: number; delta: number; error: number } | undefined;
     for (const scale of scales) {
       const delta = rawDelta * scale;
@@ -73,7 +77,7 @@ export class SafeMonotonic {
     }
     const tolerance = Math.max(250, wallDelta * 4 + 50);
     if (!best || (wallDelta > 0 && best.error > tolerance)) return undefined;
-    this.scale = best.scale;
+    if (wallDelta > 0) this.scale = best.scale;
     return best.delta;
   }
 

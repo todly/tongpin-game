@@ -4,6 +4,10 @@ export type Node=Rect&{kind:'text'|'box'|'button'|'timer';lineHeight?:number;met
 export const clamp=(n:number,max:number)=>Math.max(0,Math.min(max,n));
 // No authoritative deadline means no timer signal; callers must not fabricate 0.
 export function deadlineSeconds(deadline:number|null|undefined,now:number){if(deadline==null||!Number.isFinite(deadline)||!Number.isFinite(now))return undefined;return Math.max(0,Math.ceil((deadline-now)/1000));}
+export function dockTop(height:number,safeBottom:number,keyboardHeight:number,footerHeight:number,fullHeight=height){
+ const covered=keyboardHeight>0?Math.max(0,keyboardHeight-Math.max(0,fullHeight-height)):safeBottom;
+ return Math.max(0,height-covered-footerHeight);
+}
 export function contains(r:Rect,x:number,y:number){return x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h;}
 export function nodeBounds(nodes:Node[]){if(!nodes.length)return {x:0,y:0,w:0,h:0};const x=Math.min(...nodes.map(n=>n.x)),y=Math.min(...nodes.map(n=>n.y)),right=Math.max(...nodes.map(n=>n.x+n.w)),bottom=Math.max(...nodes.map(n=>n.y+n.h));return {x,y,w:right-x,h:bottom-y};}
 export class Layout {
@@ -27,5 +31,5 @@ export class Layout {
  // 圆环是倒计时控件，不是统计图；固定尺寸避免窄屏挤压正文。
  timer(seconds:number,total:number){if(!Number.isFinite(seconds))return;this.nodes.push({kind:'timer',x:this.inset,y:this.y,w:this.contentWidth,h:88,seconds,progress:clamp(seconds/Math.max(1,total),1),color:'#d8ff72'});this.y+=104;}
  row(build:()=>void,h:number){const start=this.y;build();this.y=start+h;}
- rowFields(value:{text:string;action:()=>void;enabled:boolean},button:{text:string;action:()=>void;enabled:boolean;fill?:string},buttonWidth=92,h=44){const start=this.y,gap=8,inputWidth=Math.max(96,this.contentWidth-buttonWidth-gap);const input=this.button(value.text||'点此输入',value.action,value.enabled,this.inset,inputWidth,'#121421',value.text?'#f6f2eb':'#b8bbce',h);input.field='word';input.stroke='#4a4d60';input.size=14;input.metrics=this.measure(input.text||'',14,600);this.y=start;const submit=this.button(button.text,button.action,button.enabled,this.inset+inputWidth+gap,buttonWidth,button.fill||'#d8ff72',button.fill&&button.fill!=='#d8ff72'?'#ffffff':'#17191f',h);submit.size=14;submit.metrics=this.measure(submit.text||'',14,600);this.y=start+h;return {input,button:submit};}
+ rowFields(value:{text:string;action:()=>void;enabled:boolean;field?:'word'|'chat';focused?:boolean},button:{text:string;action:()=>void;enabled:boolean;fill?:string},buttonWidth=92,h=44){const start=this.y,gap=8,inputWidth=Math.max(96,this.contentWidth-buttonWidth-gap);const input=this.button(value.text||'点此输入',value.action,value.enabled,this.inset,inputWidth,'#121421',value.text?'#f6f2eb':'#b8bbce',h);input.field=value.field??'word';input.focused=value.focused;input.stroke='#4a4d60';input.size=14;input.metrics=this.measure(input.text||'',14,600);this.y=start;const submit=this.button(button.text,button.action,button.enabled,this.inset+inputWidth+gap,buttonWidth,button.fill||'#d8ff72',button.fill&&button.fill!=='#d8ff72'?'#ffffff':'#17191f',h);submit.size=14;submit.metrics=this.measure(submit.text||'',14,600);this.y=start+h;return {input,button:submit};}
 }

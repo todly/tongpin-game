@@ -35,7 +35,9 @@ export class Keyboard {
     const live=()=>seq===this.sequence&&this.writable&&this.current===target;
     const input=(e:{value:string})=>{if(!live())return;if(!target.valid()){this.close();return;}this.draft=e.value;target.change(e.value);this.redraw();};
     const complete=(e?:{value:string})=>{if(!live())return;if(e)input(e);this.close();};
-    const height=(e:{height:number})=>{if(live()){this.height=Math.max(0,e.height||0);this.redraw();}};
+    const height=(e:{height:number})=>{if(seq===this.sequence&&this.current===target&&target.valid()){
+      this.height=Number.isFinite(e.height)?Math.max(0,e.height):0;this.redraw();
+    }};
     this.api.onKeyboardInput(input);this.api.onKeyboardConfirm(complete);this.api.onKeyboardComplete(complete);this.api.onKeyboardHeightChange?.(height);
     this.cleanup=()=>{this.api.offKeyboardInput(input);this.api.offKeyboardConfirm(complete);this.api.offKeyboardComplete(complete);this.api.offKeyboardHeightChange?.(height);};
     const ready=()=>{if(seq!==this.sequence)return;clearTimeout(this.timer);this.state='open';this.writable=true;this.redraw();};
