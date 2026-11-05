@@ -34,7 +34,7 @@ export class Keyboard {
     const ready=()=>{if(seq!==this.sequence)return;clearTimeout(this.timer);this.state='open';this.writable=true;this.redraw();};
     const fail=()=>{if(seq!==this.sequence)return;this.pending=undefined;this.hide();};
     this.timer=setTimeout(fail,1500);
-    try{this.api.showKeyboard({defaultValue:target.value,maxLength:{nickname:20,code:6,word:40,chat:200}[target.kind],multiple:target.kind==='chat',confirmHold:false,confirmType:'done',success:ready,fail});}catch{fail();}
+    try{this.api.showKeyboard({defaultValue:target.value,maxLength:{nickname:20,code:6,word:40,chat:200}[target.kind],multiple:false,confirmHold:true,confirmType:'send',success:ready,fail});}catch{fail();}
     this.redraw();
   }
 }

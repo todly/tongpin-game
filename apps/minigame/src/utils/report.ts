@@ -3,16 +3,17 @@ import { Layout } from '../ui/layout';
 import { render } from '../ui/renderer';
 import { historyLayout } from '../ui/history';
 import { PngStream } from './png';
+import { canvasMeasure,stableTextMetrics,type MeasureText } from '../ui/text';
 export function wrapText(text:string,measure:(s:string)=>number,width:number){const lines:string[]=[];let line='';for(const char of text){if(char==='\n'){lines.push(line);line='';continue;}if(line&&measure(line+char)>width){lines.push(line);line=char;}else line+=char;}lines.push(line);return lines;}
 const WIDTH=640,BLOCK=512,MAX_PIXELS=48_000_000,MAX_HEIGHT=100_000,MAX_BYTES=24_000_000;
-export function reportPages(room:RoomState,logs:boolean,measure:(s:string,size?:number,weight?:number)=>number){
- const l=new Layout(WIDTH,(s,size,weight)=>measure(s,size,weight));l.y=96;historyLayout(l,room,logs);const rawHeight=Math.ceil(l.y+32),scale=Math.min(1,Math.sqrt(MAX_PIXELS/(WIDTH*rawHeight)),MAX_HEIGHT/rawHeight);const height=Math.ceil(rawHeight*scale),width=Math.floor(WIDTH*scale);
+export function reportPages(room:RoomState,logs:boolean,measure:(s:string,size:number,weight?:number)=>number|ReturnType<MeasureText>){
+ const l=new Layout(WIDTH,(s,size,weight)=>{const value=measure(s,size,weight);return typeof value==='number'?{...stableTextMetrics({width:value},size),width:value}:value;});l.y=96;historyLayout(l,room,logs);const rawHeight=Math.ceil(l.y+32),scale=Math.min(1,Math.sqrt(MAX_PIXELS/(WIDTH*rawHeight)),MAX_HEIGHT/rawHeight);const height=Math.ceil(rawHeight*scale),width=Math.floor(WIDTH*scale);
  if(!Number.isFinite(scale)||scale<0.65||height>MAX_HEIGHT||width*height>MAX_PIXELS)throw new Error('纪念长图超出设备尺寸或文件预算，请取消日志后重试；不会截断记录或拆分图片。');
- return [{nodes:l.nodes.map(n=>({...n,x:n.x*scale,y:n.y*scale,w:n.w*scale,h:n.h*scale,size:(n.size||15)*scale,radius:(n.radius||0)*scale,lineHeight:((n.size||15)+5)*scale})),height,width,scale}];
+ return [{nodes:l.nodes.map(n=>({...n,x:n.x*scale,y:n.y*scale,w:n.w*scale,h:n.h*scale,size:(n.size||15)*scale,radius:(n.radius||0)*scale,lineHeight:(n.lineHeight||((n.size||15)+5))*scale,metrics:n.metrics&&{width:n.metrics.width*scale,ascent:n.metrics.ascent*scale,descent:n.metrics.descent*scale,ink:n.metrics.ink*scale,lineHeight:n.metrics.lineHeight*scale,baseline:n.metrics.baseline*scale}})),height,width,scale}];
 }
 export async function exportReport(room:RoomState,logs:boolean,api=wx):Promise<string[]>{
  const canvas=api.createCanvas();const ctx=canvas.getContext('2d');
- const [page]=reportPages(room,logs,(s,size=15,weight=400)=>{ctx.font=`${weight} ${size}px sans-serif`;return ctx.measureText(s).width;});
+ const [page]=reportPages(room,logs,canvasMeasure(ctx));
  const width=page.width;const paint=(y:number,h:number)=>{canvas.width=width;canvas.height=h;ctx.fillStyle='#111321';ctx.fillRect(0,0,width,h);ctx.font='600 24px sans-serif';ctx.fillStyle='#eee8ff';ctx.fillText('我们的灵感足迹',20,40-y);ctx.font='12px sans-serif';ctx.fillStyle='#b8bbce';ctx.fillText(logs?'包含本人授权可见记录':'仅分享回合词语',20,65-y);render(ctx,page.nodes.filter(n=>n.y+n.h>y&&n.y<y+h),-y);};
  if(page.height<=4096){paint(0,page.height);return [await new Promise<string>((resolve,reject)=>canvas.toTempFilePath({fileType:'png',success:(r:any)=>resolve(r.tempFilePath),fail:()=>reject(new Error('纪念图片生成失败。'))}))];}
  const fs=api.getFileSystemManager?.(),root=api.env?.USER_DATA_PATH;
