@@ -58,5 +58,4 @@ export function historyLayout(l:Layout,room:RoomState,logs:boolean|RoundLogs,onT
   l.nodes.splice(index,0,{kind:'box',x:outerInset,y:start,w:l.width-outerInset*2,h:l.y-start,fill:'#202238',stroke:'#403957',radius:18});
   l.y+=16;
  }
- if(!room.history.length)l.text('暂无回合词语',15,muted);
 }
