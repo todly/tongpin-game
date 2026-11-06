@@ -39,7 +39,7 @@ async function saveImages() {
   <text v-if="!game.available" class="hint">连接或身份恢复中，请暂勿操作。</text>
   <text v-if="game.error" class="error">{{ game.error }}</text>
   <template v-if="!game.room">
-    <text class="hint">2–6 位伙伴，一个词，想到一起。</text>
+    <text class="hint">一个词，想到一起。</text>
     <input v-model="nickname" maxlength="20" placeholder="你的昵称" />
     <button :disabled="!game.available" @click="act('room:create', { nickname })">创建房间</button>
     <input v-model="code" maxlength="6" placeholder="输入六位房间码" />

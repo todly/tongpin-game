@@ -28,9 +28,10 @@ export interface ClientToServerEvents{
 }
 export interface ServerToClientEvents{'room:state':(s:RoomState)=>void;'room:error':(m:string)=>void}
 export type Ack<T>=(r:{ok:true;data:T}|{ok:false;error:string})=>void;
-const FRUITS=['苹果','香蕉','草莓','葡萄','西瓜','芒果','蜜桃','柠檬','樱桃','蓝莓','荔枝','橙子'];
-const PREFIXES=['快乐','勇敢','温柔','机灵','悠闲','闪亮','活泼','好奇'];
-export function randomNickname(random=Math.random){return `${PREFIXES[Math.floor(random()*PREFIXES.length)]!}${FRUITS[Math.floor(random()*FRUITS.length)]!}`}
+// 昵称由前缀与水果独立随机组合，词库保持两字词，避免窄屏输入框截断。
+export const NICKNAME_PREFIXES=['快乐','勇敢','温柔','机灵','悠闲','闪亮','活泼','好奇','安静','元气','认真','迷糊','淡定','热情','冷静','浪漫','倔强','淘气','乖巧','神秘','自在','清醒','软糯','轻盈','可爱','古怪'] as const;
+export const NICKNAME_FRUITS=['苹果','香蕉','草莓','葡萄','西瓜','芒果','蜜桃','柠檬','樱桃','蓝莓','荔枝','橙子','柚子','石榴','菠萝','椰子','木瓜','杨梅','枇杷','山楂','桑葚','李子','杏子','柿子','青提','雪梨','甘蔗','榴莲','芭乐','释迦','杨桃','龙眼'] as const;
+export function randomNickname(random=Math.random){return `${NICKNAME_PREFIXES[Math.floor(random()*NICKNAME_PREFIXES.length)]!}${NICKNAME_FRUITS[Math.floor(random()*NICKNAME_FRUITS.length)]!}`}
 export function normalizeNickname(v?:string){return v?.trim().replace(/\s+/g,' ').slice(0,20)||randomNickname()}
 export function normalizeWord(v:string){return v.trim().replace(/\s+/g,' ').slice(0,40)}
 export function sanitizeSettings(s:Partial<Settings>,c:Settings){const t=Math.round(Number(s.timerSeconds??c.timerSeconds)),r=Math.round(Number(s.maxRounds??c.maxRounds));return{timerSeconds:Math.min(MAX_TIMER,Math.max(MIN_TIMER,Number.isFinite(t)?t:c.timerSeconds)),maxRounds:Math.min(MAX_ROUNDS,Math.max(MIN_ROUNDS,Number.isFinite(r)?r:c.maxRounds))}}
