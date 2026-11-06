@@ -2,6 +2,8 @@ export { orderedTimeline, formatEvent } from './timeline.js';
 export { syncInput } from './inputSync.js';
 export { normalizeEpoch, SafeMonotonic, StateCountdown } from './time.js';
 export type { ClockDiagnostic, EpochValue, SafeMonotonicOptions } from './time.js';
+export { DEFAULT_SENSITIVE_WORDS, normalizeForSensitiveCheck, createSensitiveWordChecker, sensitiveChecker, checkSensitive } from './sensitive.js';
+export type { SensitiveCheckResult, SensitiveWordOptions } from './sensitive.js';
 export const MIN_PLAYERS=2, MAX_PLAYERS=6, DEFAULT_TIMER=60, DEFAULT_MAX_ROUNDS=10, MIN_TIMER=10, MAX_TIMER=180, MIN_ROUNDS=1, MAX_ROUNDS=30;
 export type RoomPhase='lobby'|'writing'|'reveal'|'ended';
 export interface Settings{timerSeconds:number;maxRounds:number}

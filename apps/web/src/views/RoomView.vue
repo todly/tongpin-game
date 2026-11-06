@@ -7,11 +7,19 @@ import Timeline from '../components/Timeline.vue';
 import ShareReport from '../components/ShareReport.vue';
 import { syncInput } from '../utils/inputSync';
 import { exportReport, shareFiles } from '../utils/shareReport';
-import { playerColor, type RoomState } from '@word-sync/shared';
+import { checkSensitive, playerColor, type RoomState } from '@word-sync/shared';
 const includeLogs=ref(false), exporting=ref(false), shareMessage=ref(''), report=ref<HTMLElement>(), snapshot=ref<RoomState>();
 async function share(){if(exporting.value||!game.room)return;exporting.value=true;shareMessage.value='正在生成完整图片…';try{snapshot.value=JSON.parse(JSON.stringify(game.room));await nextTick();const files=await exportReport(report.value!);shareMessage.value=await shareFiles(files);}catch{shareMessage.value='图片生成失败，请重试或检查浏览器权限。';}finally{exporting.value=false;}}
 const game = useGameStore(); const router = useRouter();
 const nickname = ref(''); const word = ref(''); const chat = ref(''); const now = ref(Date.now()); const showHistory = ref(false);
+const sensitiveTip = ref('');
+// 敏感词命中时禁止提交并给出提示；返回 true 表示可以继续提交。
+function guard(value: string): boolean {
+  const result = checkSensitive(value);
+  sensitiveTip.value = result.hit ? result.message : '';
+  return !result.hit;
+}
+function clearTip() { if (sensitiveTip.value) sensitiveTip.value = ''; }
 const interval = setInterval(() => now.value = Date.now(), 250); onBeforeUnmount(() => clearInterval(interval));
 watch(() => game.me?.nickname, (value) => { if (value) nickname.value = value; }, { immediate: true });
 watch(() => game.room, (room, previous) => { if(room)word.value=syncInput(word.value,previous,room,game.session?.playerId??''); if(room?.roundId!==previous?.roundId){chat.value='';showHistory.value=false;} }, { immediate:true });
@@ -31,7 +39,12 @@ const progressGroups = computed(() => {
 async function act(action: () => Promise<unknown>) { try { await action(); } catch {} }
 async function leave() { await act(async () => { await game.leave(); await router.push('/'); }); }
 async function copyCode() { try { if (game.room) await window.navigator.clipboard.writeText(game.room.code); } catch { game.error = '无法自动复制，请手动复制房间码。'; } }
-async function sendChat() { if (!chat.value.trim()) return; try { await game.chat(chat.value); chat.value = ''; } catch {} }
+// 聊天发送前检测敏感词，命中则禁止发送。
+async function sendChat() { if (!chat.value.trim()) return; if (!guard(chat.value)) return; try { await game.chat(chat.value); chat.value = ''; } catch {} }
+// 词语提交/候选词提议前检测敏感词，命中则禁止提交。
+function submitWord() { if (!guard(word.value)) return; act(() => game.myGroup ? game.propose(word.value) : game.submit(word.value)); }
+// 大厅保存昵称前检测敏感词，命中则禁止保存。
+function rename() { if (!guard(nickname.value)) return; act(() => game.rename(nickname.value)); }
 </script>
 <template>
   <section v-if="game.room" class="room">
@@ -49,18 +62,20 @@ async function sendChat() { if (!chat.value.trim()) return; try { await game.cha
     <template v-else-if="game.room.view === 'lobby'">
       <div class="section-title"><div><p class="eyebrow">召集同频伙伴</p><h2>房间大厅</h2></div><span class="count">{{ game.room.players.length }}/6</span></div>
       <div class="card invite"><p>把房间码发给朋友</p><strong>{{ game.room.code }}</strong><button @click="copyCode">复制房间码</button></div>
-      <label>你的昵称</label><div class="inline"><input v-model="nickname" maxlength="20"><button :disabled="!game.available" @click="act(() => game.rename(nickname))">保存</button></div>
+      <label>你的昵称</label><div class="inline"><input v-model="nickname" maxlength="20" @input="clearTip"><button :disabled="!game.available" @click="rename">保存</button></div>
+      <p v-if="sensitiveTip" role="alert" class="error">{{ sensitiveTip }}</p>
       <div class="players"><article v-for="player in game.room.players" :key="player.id" class="player"><span class="avatar"><PlayerName :name="player.nickname[0]!" :color-id="player.colorId" /></span><div><strong><PlayerName :name="player.nickname" :color-id="player.colorId" />{{ player.id === game.room.ownerId ? '（房主）' : '' }}</strong><small>{{ player.connected ? '已连接' : '离线，可重连' }}</small></div><span :class="['status', { ready: player.ready }]">{{ game.room.phase==='ended'&&!player.returnedToLobby ? '查看结果中' : player.ready ? '已准备' : '等待中' }}</span></article></div>
       <div class="card settings"><h3>游戏设置</h3><p>{{ game.isOwner ? '你是房主，可以修改设置。' : '仅房主可修改设置。' }}</p><label>回合计时 <b>{{ game.room.settings.timerSeconds }} 秒</b></label><input :disabled="!game.available || !game.isOwner" type="range" min="10" max="180" step="5" :value="game.room.settings.timerSeconds" @change="act(() => game.settings({ timerSeconds: +($event.target as HTMLInputElement).value }))"><label>最多回合数</label><input :disabled="!game.available || !game.isOwner" type="number" min="1" max="30" :value="game.room.settings.maxRounds" @change="act(() => game.settings({ maxRounds: +($event.target as HTMLInputElement).value }))"></div>
       <button :disabled="!game.available" class="primary sticky" :class="{ active: game.me?.ready }" @click="act(() => game.ready(!game.me?.ready))">{{ game.me?.ready ? '已准备 ✓' : '我准备好了' }}</button><p class="hint">所有仍在房间的伙伴返回大厅、在线并准备好后，游戏自动开始。</p>
     </template>
 
     <template v-else-if="game.room.view === 'writing'">
-      <div class="round-top"><div><p class="eyebrow">第 {{ game.room.round }}/{{ game.room.settings.maxRounds }} 回合</p><h2>一个词。<br>想到一起。</h2></div><div class="timer">{{ seconds }}<small>秒</small></div></div>
+      <div class="round-top"><div><p class="eyebrow">第 {{ game.room.round }}/{{ game.room.settings.maxRounds }} 回合</p><h2>en一个词。<br>想到一起。</h2></div><div class="timer">{{ seconds }}<small>秒</small></div></div>
       <div class="card prompt"><span>✦</span><p>写下你觉得其他人也会写的那个词。</p></div>
-      <form @submit.prevent="act(() => game.myGroup ? game.propose(word) : game.submit(word))"><label>{{ game.myGroup ? '小组候选词' : '你的词' }}</label><input v-model="word" class="word-input" maxlength="40" :disabled="submitted || !game.available || !!game.room.proposals.length" placeholder="相信你的直觉…"><button class="primary" :disabled="submitted || !game.available || !!game.room.proposals.length">{{ submitted ? '已锁定 ✓' : game.myGroup ? '提出候选词' : '锁定这个词' }}</button></form>
+      <form @submit.prevent="submitWord"><label>{{ game.myGroup ? '小组候选词' : '你的词' }}</label><input v-model="word" class="word-input" maxlength="40" :disabled="submitted || !game.available || !!game.room.proposals.length" placeholder="相信你的直觉…" @input="clearTip"><button class="primary" :disabled="submitted || !game.available || !!game.room.proposals.length">{{ submitted ? '已锁定 ✓' : game.myGroup ? '提出候选词' : '锁定这个词' }}</button></form>
+      <p v-if="sensitiveTip" role="alert" class="error">{{ sensitiveTip }}</p>
       <div class="submission-progress"><div class="progress-teams"><section v-for="team in progressGroups" :key="team.id" class="progress-team" :aria-label="team.label"><div class="progress-members"><span v-for="player in team.players" :key="player.id" :class="{ done: game.room.submittedPlayerIds.includes(player.id) }" :style="{ color: playerColor(player.colorId), background: playerColor(player.colorId) + '22', border: '1px solid ' + playerColor(player.colorId), opacity: 1 }" :title="player.nickname + (game.room.submittedPlayerIds.includes(player.id) ? '：已提交' : '：未提交')">{{ player.nickname[0] }}<i v-if="game.room.submittedPlayerIds.includes(player.id)" class="progress-check">✓</i></span></div></section></div><p>已有 {{ game.room.submittedPlayerIds.length }}/{{ game.room.players.length }} 人提交</p></div>
-      <div class="card group-feed"><h3>{{ game.myGroup ? '小组聊天' : '我的思考' }}</h3><Timeline :items="game.room.currentFeed" /><form class="inline" @submit.prevent="sendChat"><input v-model="chat" maxlength="200" :placeholder="game.myGroup ? '仅同组成员可见' : '仅自己可见，记下你的思考'"><button :disabled="!game.available || !chat.trim()">发送</button></form></div>
+      <div class="card group-feed"><h3>{{ game.myGroup ? '小组聊天' : '我的思考' }}</h3><Timeline :items="game.room.currentFeed" /><form class="inline" @submit.prevent="sendChat"><input v-model="chat" maxlength="200" :placeholder="game.myGroup ? '仅同组成员可见' : '仅自己可见，记下你的思考'" @input="clearTip"><button :disabled="!game.available || !chat.trim()">发送</button></form><p v-if="sensitiveTip" role="alert" class="error">{{ sensitiveTip }}</p></div>
       <div v-if="game.myGroup" class="card group-feed"><p class="eyebrow">候选词与共同确认</p><p>全组同意后立即提交；计时结束采用当前未拒绝的候选词。每组仅有一个未决候选，更换前请先拒绝旧候选。</p><p v-if="!game.room.proposals.length">尚无候选词，超时将记为空白。</p><article v-for="proposal in game.room.proposals" :key="proposal.id"><h3>{{ proposal.word }}</h3><p>提出者：<PlayerName :name="game.room.players.find(p=>p.id===proposal.proposerId)?.nickname||proposal.proposerId" :color-id="game.room.players.find(p=>p.id===proposal.proposerId)?.colorId" /></p><p>已同意 {{ proposal.confirmations.length }}/{{ proposal.memberIds.length }}：<PlayerName v-for="id in proposal.confirmations" :key="id" :name="game.room.players.find(p=>p.id===id)?.nickname||id" :color-id="game.room.players.find(p=>p.id===id)?.colorId" /></p><div class="proposal-actions" v-if="proposal.memberIds.includes(game.me?.id || '')"><button class="secondary" :disabled="!game.available || proposal.confirmations.includes(game.me?.id || '')" @click="act(() => game.confirm(proposal.id))">{{ proposal.confirmations.includes(game.me?.id || '') ? '已同意' : '同意候选' }}</button><button class="reject-button" :disabled="!game.available" @click="act(() => game.reject(proposal.id))">拒绝此候选</button></div></article></div>
       <p class="privacy">所有人提交前，你的词不会公开。</p>
     </template>

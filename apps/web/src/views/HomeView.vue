@@ -2,10 +2,17 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useGameStore } from '../stores/game';
+import { checkSensitive } from '@word-sync/shared';
 const game = useGameStore(); const router = useRouter();
-const nickname = ref(''); const code = ref(''); const joining = ref(false);
-async function create() { try { await game.create(nickname.value); await router.push('/room'); } catch {} }
-async function join() { try { await game.join(code.value, nickname.value); await router.push('/room'); } catch {} }
+const nickname = ref(''); const code = ref(''); const joining = ref(false); const sensitiveTip = ref('');
+// 提交前检测昵称中的敏感词：命中则禁止提交并提示。
+function guardNickname(): boolean {
+  const result = checkSensitive(nickname.value);
+  sensitiveTip.value = result.hit ? result.message : '';
+  return !result.hit;
+}
+async function create() { if (!guardNickname()) return; try { await game.create(nickname.value); await router.push('/room'); } catch {} }
+async function join() { if (!guardNickname()) return; try { await game.join(code.value, nickname.value); await router.push('/room'); } catch {} }
 </script>
 <template>
   <section class="home">
@@ -16,6 +23,7 @@ async function join() { try { await game.join(code.value, nickname.value); await
       <label>你的昵称 <small>可选</small></label><input v-model="nickname" maxlength="20" placeholder="随机昵称也很有趣">
       <label v-if="joining">房间码 <small>加入房间时填写</small></label><input v-if="joining" v-model="code" maxlength="6" class="code-input" placeholder="ABC123" @input="code = code.toUpperCase()">
       <p v-if="game.session">正在恢复已有房间，请等待连接；网络错误不会清除会话。</p><p v-else-if="!game.connected">正在连接服务器…</p>
+      <p v-if="sensitiveTip" role="alert" class="error">{{ sensitiveTip }}</p>
       <p v-if="game.error" class="error">{{ game.error }}</p>
       <button v-if="joining" class="primary" :disabled="!game.available || (joining && !/^[A-Z0-9]{6}$/.test(code.trim()))">加入房间</button>
       <button v-else class="primary" type="button" :disabled="!game.available || (joining && !/^[A-Z0-9]{6}$/.test(code.trim()))" @click="create">创建房间</button>
