@@ -1,6 +1,6 @@
 import {normalizeMeasure,type MeasureInput,type MeasureText,type TextMetrics} from './text';
 export type Rect={x:number;y:number;w:number;h:number};
-export type Node=Rect&{kind:'text'|'box'|'button'|'timer';lineHeight?:number;metrics?:TextMetrics;baseline?:'middle';field?:string;focused?:boolean;caret?:boolean;weight?:number;seconds?:number;progress?:number;text?:string;lines?:string[];size?:number;color?:string;fill?:string;stroke?:string;align?:'left'|'center';radius?:number;enabled?:boolean;action?:()=>void};
+export type Node=Rect&{kind:'text'|'box'|'button'|'timer';lineHeight?:number;metrics?:TextMetrics;baseline?:'middle';field?:string;padRight?:number;focused?:boolean;caret?:boolean;weight?:number;seconds?:number;progress?:number;text?:string;lines?:string[];size?:number;color?:string;fill?:string;stroke?:string;align?:'left'|'center';radius?:number;enabled?:boolean;action?:()=>void};
 export const clamp=(n:number,max:number)=>Math.max(0,Math.min(max,n));
 // No authoritative deadline means no timer signal; callers must not fabricate 0.
 export function deadlineSeconds(deadline:number|null|undefined,now:number){if(deadline==null||!Number.isFinite(deadline)||!Number.isFinite(now))return undefined;return Math.max(0,Math.ceil((deadline-now)/1000));}
@@ -26,6 +26,8 @@ export class Layout {
  rich(parts:{text:string;color:string}[],size=12){let x=this.inset,y=this.y;const created:Node[]=[];for(const part of parts)for(const ch of part.text){const metrics=this.measure(ch,size),w=metrics.width;if(ch==='\n'||x+w>this.width-this.inset){x=this.inset;y+=metrics.lineHeight+5;if(ch==='\n')continue;}const node:Node={kind:'text',x,y,w,h:metrics.ink,lines:[ch],size,color:part.color,lineHeight:metrics.lineHeight+5,metrics};this.nodes.push(node);created.push(node);x+=w;}this.y=nodeBounds(created).y+nodeBounds(created).h;return created;}
  box(y:number,h:number,x=this.inset,w=this.contentWidth,fill='#202238',stroke='#303247',radius=22){this.nodes.push({kind:'box',x,y,w,h,fill,stroke,radius});}
  button(text:string,action:()=>void,enabled=true,x=this.inset,w=this.contentWidth,fill='#d8ff72',color='#17191f',h=48){const size=15,n:Node={kind:'button',x,y:this.y,w,h,text,action,enabled,fill,color,radius:13,size,metrics:this.measure(text,size,600)};this.nodes.push(n);this.y+=h+10;return n;}
+ // 字段内嵌小按钮：绘制在字段内部右侧，不推进布局 y；字段文本通过 padRight 自动避让按钮区域。
+ fieldButton(field:Node,text:string,action:()=>void,enabled=true,w=76,h=32,gap=8){const n:Node={kind:'button',x:field.x+field.w-w-gap,y:field.y+(field.h-h)/2,w,h,text,action,enabled,fill:'#282b42',color:'#ececf5',radius:10,size:12,metrics:this.measure(text,12,600)};this.nodes.push(n);field.padRight=w+gap*2;return n;}
  // 页面边距和卡片内边距分别计算，嵌套内容不能贴到卡片边缘。
  card(build:()=>void,stroke='#303247',fill='#202238',padding=16,gap=16){const start=this.y,index=this.nodes.length,inset=this.inset;this.y+=padding;this.inset+=padding;build();this.inset=inset;this.y+=padding;this.nodes.splice(index,0,{kind:'box',x:inset,y:start,w:this.width-inset*2,h:this.y-start,fill,stroke,radius:18});this.y+=gap;}
  // 圆环是倒计时控件，不是统计图；固定尺寸避免窄屏挤压正文。
