@@ -1,9 +1,13 @@
 export type InputKind='nickname'|'code'|'word'|'chat';
 type Target={kind:InputKind;value:string;valid:()=>boolean;change:(v:string)=>void};
+// Reserve room for the native editor above the reported keyboard. WeChat does
+// not report this editor's bounds separately; this is an avoidance allowance.
+const NATIVE_INPUT_BAR_HEIGHT=64;
 export class Keyboard {
   state:'idle'|'showing'|'open'|'hiding'='idle';
   private pending?:Target;private current?:Target;private cleanup?:()=>void;private timer?:number;private sequence=0;private writable=false;
   draft='';kind?:InputKind;height=0;
+  get occludedHeight(){return this.height>0?this.height+NATIVE_INPUT_BAR_HEIGHT:0;}
   constructor(private api=wx,private redraw=()=>{}){}
   close(){this.pending=undefined;this.hide();}
   confirm(){this.close();}

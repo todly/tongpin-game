@@ -5,7 +5,7 @@ export class ServerClock {
   private anchor:number;private at:number;private best=Infinity;
   private readonly safe:SafeMonotonic;
   private readonly wall:()=>number;
-  constructor(monotonic=()=>(globalThis as any).performance?.now?.()??Date.now(),wall:number|(()=>number)=Date.now(),debug=false){
+  constructor(monotonic=()=>(globalThis as any).performance?.now?.()??Date.now(),wall:number|(()=>number)=Date.now,debug=false){
     this.wall=typeof wall==='function'?wall:()=>Number(wall);
     this.safe=new SafeMonotonic(monotonic,{wall:this.wall,debug,diagnose:event=>(globalThis as any).console?.debug?.('[clock]',event)});
     this.at=this.safe.now();this.anchor=this.wall();
