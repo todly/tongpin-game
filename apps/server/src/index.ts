@@ -6,7 +6,7 @@ import cors from 'cors';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents } from '@word-sync/shared';
-import { GameService } from './game.js';
+import { GameService, contentSecurity } from './game.js';
 import { attachWebSocket, validRequest } from './websocket.js';
 
 export function createApp() {
@@ -36,5 +36,7 @@ export function createApp() {
 
 if (process.env.NODE_ENV !== 'test') {
   const port = Number(process.env.PORT ?? 3000);
+  // 启动时打印内容安全配置状态，便于在云托管日志中确认凭据是否生效。
+  contentSecurity().announce();
   createApp().httpServer.listen(port, () => console.log(`同频词服务已启动：http://localhost:${port}`));
 }

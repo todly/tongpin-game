@@ -8,10 +8,11 @@
 - web 端保留本地词库兜底，但移除前端预检逻辑，统一由服务端校验；微信接口未配置或调用失败时同样回退本地词库，避免阻断游戏。
 - 新增 `WECHAT_APPID`、`WECHAT_APPSECRET` 环境变量；`SENSITIVE_WORDS` 继续用于扩展本地词库。
 - 服务端新增轻量 `.env` 加载（[`env.ts`](apps/server/src/env.ts:1)）：从工作目录向上查找，不覆盖部署平台已注入的变量；微信客户端改为惰性初始化，确保凭据在 `.env` 加载后读取。
+- 新增中文运行日志，便于在微信云托管日志中确认是否真正调用了官方接口：启动时打印一次配置状态（appid 脱敏），每次 access_token 获取、code2session、msgSecCheck 都输出一行，包含场景、字数、suggest、label、errcode 与耗时，且不记录被检测文本原文。
 
 ### 验证状态
 
-- 类型检查 5/5 通过；测试 129 个全部通过（shared 35、server 24、minigame 56、miniprogram 2、web 12）。
+- 类型检查 5/5 通过；测试 135 个全部通过（shared 35、server 30、minigame 56、miniprogram 2、web 12）。
 - 未使用真实微信凭据联调，官方接口的实际返回需在配置凭据后于小游戏环境验证。
 
 ## 2026-11-06 · 倒计时与系统输入栏补充修复
