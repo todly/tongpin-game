@@ -54,6 +54,7 @@ pnpm --filter @word-sync/miniprogram build:mp-weixin
 
 1. 在微信开发者工具或微信云托管控制台开通关联的小程序云环境，记下真实环境 ID；创建服务并记下真实服务名。确认小程序拥有该环境访问权限，跨环境使用需单独授权。
 2. 以仓库根目录作为 Docker 构建上下文，Dockerfile 路径为根目录 `Dockerfile`。构建和部署后配置监听端口 `3000`，环境变量 `PORT=3000`、`NODE_ENV=production`；健康探测为 HTTP `/health`。云托管网关必须支持 WebSocket 升级及长连接，原生端点 `/ws`、网页 `/socket.io/` 和网页静态文件共用同一端口。
+3. **内容安全云调用**：在控制台开启「开放接口服务」，并在「云调用-微信令牌权限配置」中开通 `/wxa/game/content_spam/msg_sec_check`。开启后必须重新构建并发布新版本，旧版本容器没有云调用旁加载代理。云调用免 `access_token`，openid 由云托管通过 WebSocket 升级请求头 `x-wx-openid` 注入，无需 `wx.login`。日志出现 `云调用=<seqid>` 表示走通；缺失时提示检查开关与权限配置。
 3. **实例数固定为一个，保持最小实例数一个并避免缩容到零。** 本服务只在进程内存保存房间，多副本会分裂房间；重启、更新、实例迁移均使房间和令牌失效。会话亲和本身不提供持久化保障。首次部署先通过健康探测和两端混合对局确认网关行为。
 4. 在 `apps/miniprogram/.env.local` 设置 `VITE_CONNECTION_MODE=cloud`，填写 `VITE_CLOUD_ENV` 和 `VITE_CLOUD_SERVICE`；在 manifest 填真实 AppID。这三个值是部署标识，不是秘密。客户端执行 `wx.cloud.init` 后以 `wx.cloud.connectContainer({config:{env},service,path:'/ws'})` 建立连接，不拼接或分享身份令牌。不要提交私有配置或账户密钥。
 5. 执行生产小程序构建，开发者工具导入 `dist/build/mp-weixin`，选择真实 AppID 和有权限的开发者账号。检查控制台、首页、Canvas 多页图片、相册授权、前后台切换及离线恢复。开发者工具基础库需支持云托管 `connectContainer`；不支持时升级工具与基础库，不回退为无鉴权公开接口。
@@ -122,6 +123,10 @@ pnpm --filter @word-sync/server start
 - `PORT`：服务端端口，默认为 `3000`
 - `CORS_ORIGIN`：前后端分开部署时，允许访问的 web 来源，多个来源用英文逗号分隔
 - `VITE_SERVER_URL`：前端单独部署时使用的后端公开 URL；留空则使用当前来源
+- `WECHAT_FROM_APPID`：可选，资源复用时指定归属小程序 appid，会作为 `from_appid` 附加到云调用请求
+- `WECHAT_API_BASE`：可选，覆盖微信 API 域名，默认 `http://api.weixin.qq.com`（云调用内网地址）
+- `WECHAT_APPID`：可选，仅用于启动日志中脱敏展示，云调用本身不需要
+- `SENSITIVE_WORDS`：额外本地敏感词，逗号或竖线分隔；web 端与云调用不可用时生效
 
 ## Docker
 

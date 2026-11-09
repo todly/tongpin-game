@@ -41,13 +41,18 @@ export function loadEnv(start = process.cwd(), depth = 3): string | undefined {
   return undefined;
 }
 
-/** 启动诊断：打印 .env 命中情况与关键环境变量是否注入（不打印值）。 */
+/** 启动诊断：打印 .env 命中情况与可选配置状态（不打印值）。 */
 export function reportEnv() {
   if (process.env.NODE_ENV === 'test') return;
   const file = loadEnv();
-  const keys = ['WECHAT_APPID', 'WECHAT_FROM_APPID', 'WECHAT_API_BASE', 'SENSITIVE_WORDS'];
-  const status = keys.map((key) => `${key}=${process.env[key] ? '已设置' : '未设置'}`).join(' ');
-  console.log(`[环境] .env ${file ? `已加载 ${file}` : '未找到（依赖部署平台环境变量）'}；${status}`);
+  const optional = [
+    ['WECHAT_FROM_APPID', '不附加 from_appid'],
+    ['WECHAT_API_BASE', '默认 http://api.weixin.qq.com'],
+    ['SENSITIVE_WORDS', '仅用内置词库'],
+  ]
+    .map(([key, fallback]) => `${key}=${process.env[key] ? '已设置' : fallback}`)
+    .join('；');
+  console.log(`[环境] .env ${file ? `已加载 ${file}` : '未找到（依赖部署平台环境变量）'}；云调用无需微信凭据；可选：${optional}`);
 }
 
 loadEnv();

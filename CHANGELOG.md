@@ -1,19 +1,25 @@
 # 更新日志
 
-## 2026-11-09 · 敏感词校验接入微信官方内容安全识别
+## 2026-11-09 · 敏感词校验接入微信官方内容安全识别（云调用）
 
 - 微信端（小游戏/小程序）的昵称、提交词语、小组候选词与聊天内容，改由服务端调用微信官方 `gameMsgSecCheck`（文本内容安全识别）接口校验，命中 `risky` 时按官方标签（营销广告/时政/色情/辱骂/违法犯罪/低俗/其他）返回中文提示。
-- 新增 `wechat:login` 事件：微信端连接后用 `wx.login` 的 code 换取 openid，服务端按连接缓存；上报失败不阻断连接。
-- 服务端新增 access_token 缓存与并发刷新（提前 5 分钟过期）、code2session 与 msgSecCheck 调用，超时 3 秒。
-- web 端保留本地词库兜底，但移除前端预检逻辑，统一由服务端校验；微信接口未配置或调用失败时同样回退本地词库，避免阻断游戏。
-- 新增 `WECHAT_APPID`、`WECHAT_APPSECRET` 环境变量；`SENSITIVE_WORDS` 继续用于扩展本地词库。
-- 服务端新增轻量 `.env` 加载（[`env.ts`](apps/server/src/env.ts:1)）：从工作目录向上查找，不覆盖部署平台已注入的变量；微信客户端改为惰性初始化，确保凭据在 `.env` 加载后读取。
-- 新增中文运行日志，便于在微信云托管日志中确认是否真正调用了官方接口：启动时打印一次配置状态（appid 脱敏），每次 access_token 获取、code2session、msgSecCheck 都输出一行，包含场景、字数、suggest、label、errcode 与耗时，且不记录被检测文本原文。
+- 采用微信云托管「开放接口服务」云调用：容器内以 HTTP 请求 `http://api.weixin.qq.com`，**无需 access_token**，也**无需 `wx.login` / code2session**；openid 由云托管在 WebSocket 升级请求头 `x-wx-openid` 中自动注入，服务端直接读取。
+- 回包 Header 的 `x-openapi-seqid` 被记录为云调用链路凭证，日志中输出 `云调用=<seqid>`；缺失时提示检查「开放接口服务」开关与「云调用-微信令牌权限配置」。
+- web 端保留本地词库兜底，但移除前端预检逻辑，统一由服务端校验；无 openid（web 端）或云调用失败时回退本地词库，避免阻断游戏。
+- 环境变量：`WECHAT_FROM_APPID`（资源复用时附加 `from_appid`）、`WECHAT_API_BASE`（默认 `http://api.weixin.qq.com`）、`WECHAT_APPID`（仅用于日志脱敏展示）、`SENSITIVE_WORDS`（扩展本地词库）。
+- 服务端新增轻量 `.env` 加载（[`env.ts`](apps/server/src/env.ts:1)）：从工作目录向上查找，不覆盖部署平台已注入的变量；微信客户端改为惰性初始化，确保配置在 `.env` 加载后读取。
+- 新增中文运行日志，便于在微信云托管日志中确认是否真正调用了官方接口：启动时打印一次配置状态（appid 脱敏），每次 msgSecCheck 输出一行，包含场景、字数、suggest、label、errcode、云调用 seqid 与耗时，且不记录被检测文本原文。
+
+### 部署要求
+
+- 在微信云托管控制台开启「开放接口服务」，并在「云调用-微信令牌权限配置」中开通 `/wxa/game/content_spam/msg_sec_check`。
+- 开启开关后必须**重新构建并发布新版本**，旧版本容器没有云调用旁加载代理。
+- 验证方式：小游戏内触发一次昵称或词语提交，云托管日志出现 `云调用=<seqid>` 即表示走通。
 
 ### 验证状态
 
-- 类型检查 5/5 通过；测试 135 个全部通过（shared 35、server 30、minigame 56、miniprogram 2、web 12）。
-- 未使用真实微信凭据联调，官方接口的实际返回需在配置凭据后于小游戏环境验证。
+- 类型检查 5/5 通过；测试 141 个全部通过（shared 35、server 36、minigame 56、miniprogram 2、web 12）。
+- 未使用真实微信凭据联调，官方接口的实际返回需在开启云调用后于小游戏环境验证。
 
 ## 2026-11-06 · 倒计时与系统输入栏补充修复
 
