@@ -2,8 +2,8 @@ export { orderedTimeline, formatEvent } from './timeline.js';
 export { syncInput } from './inputSync.js';
 export { normalizeEpoch, SafeMonotonic, StateCountdown } from './time.js';
 export type { ClockDiagnostic, EpochValue, SafeMonotonicOptions } from './time.js';
-export { DEFAULT_SENSITIVE_WORDS, normalizeForSensitiveCheck, createSensitiveWordChecker, sensitiveChecker, checkSensitive } from './sensitive.js';
-export type { SensitiveCheckResult, SensitiveWordOptions } from './sensitive.js';
+export { DEFAULT_SENSITIVE_WORDS, normalizeForSensitiveCheck, createSensitiveWordChecker, sensitiveChecker, checkSensitive, MSG_SEC_CHECK_SCENE, MSG_SEC_CHECK_VERSION, MSG_SEC_CHECK_LABELS, mapMsgSecCheckResult } from './sensitive.js';
+export type { SensitiveCheckResult, SensitiveWordOptions, MsgSecCheckScene, MsgSecCheckPayload } from './sensitive.js';
 export const MIN_PLAYERS=2, MAX_PLAYERS=6, DEFAULT_TIMER=60, DEFAULT_MAX_ROUNDS=10, MIN_TIMER=10, MAX_TIMER=180, MIN_ROUNDS=1, MAX_ROUNDS=30;
 export type RoomPhase='lobby'|'writing'|'reveal'|'ended';
 export interface Settings{timerSeconds:number;maxRounds:number}
@@ -23,7 +23,9 @@ export type RoundRef={roundId:string;proposalVersion:number};
 export type TimeSyncRequest=null;
 export interface TimeSyncResponse{receivedAt:number;sentAt:number}
 export interface ClientToServerEvents{
- 'time:sync':(p:TimeSyncRequest,a:Ack<TimeSyncResponse>)=>void;
+  'time:sync':(p:TimeSyncRequest,a:Ack<TimeSyncResponse>)=>void;
+  // 微信端连接后上报 wx.login 的 code，服务端换取 openid 用于内容安全识别。
+  'wechat:login':(p:{code:string},a?:Ack<null>)=>void;
  'room:create':(p:{nickname?:string},a:Ack<SessionPayload>)=>void;'room:join':(p:{code:string;nickname?:string},a:Ack<SessionPayload>)=>void;'room:reconnect':(p:SessionPayload,a:Ack<SessionPayload>)=>void;'room:leave':(a?:Ack<null>)=>void;
  'lobby:rename':(n:string,a?:Ack<null>)=>void;'lobby:ready':(r:boolean,a?:Ack<null>)=>void;'lobby:settings':(s:Partial<Settings>,a?:Ack<null>)=>void;
  'game:submit':(p:{word:string;roundId:string},a?:Ack<null>)=>void;'group:propose':(p:RoundRef&{word:string},a?:Ack<null>)=>void;'group:approve':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:confirm':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:reject':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:chat':(p:{text:string;roundId:string},a?:Ack<null>)=>void;'game:rematch':(p:{gameId:string},a?:Ack<null>)=>void;

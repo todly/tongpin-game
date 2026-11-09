@@ -16,10 +16,18 @@ export const useGameStore = defineStore('game', () => {
   function queue() { clearTimeout(retry); retry = setTimeout(() => { void connect(); }, 1500); }
   transport.onClose = () => { connected.value = false; restored.value = false; queue(); };
   function save(value: SessionPayload) { session.value = value; uni.setStorageSync('word-sync-session', value); }
+  // 微信端内容安全识别需要 openid：连接后用 wx.login 的 code 换取。
+  // 上报失败不阻断连接，服务端会回退本地词库。
+  function login() {
+    try {
+      uni.login({ provider: 'weixin', success: (r: any) => { if (r?.code) void transport.request('wechat:login', { code: r.code }).catch(() => {}); }, fail: () => {} });
+    } catch { /* 未配置或登录失败时，服务端使用本地词库兜底。 */ }
+  }
   async function connect() {
     if (connecting || connected.value) return; connecting = true; clearTimeout(retry);
     try {
       await transport.connect(); connected.value = true; error.value = '';
+      login();
       if (session.value) {
         try { save(await transport.request<SessionPayload>('room:reconnect', session.value)); }
         catch (e) {

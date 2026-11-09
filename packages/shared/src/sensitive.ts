@@ -1,6 +1,7 @@
-// 敏感词检测：客户端用于禁止提交并提示，服务端用于兜底校验。
-// 词库内置于 sensitive-words.ts（fwwdn/sensitive-stop-words + 日常脏话补充），
-// 支持通过配置注入扩展词库。
+// 敏感词检测：
+// - 微信端（小游戏/小程序）由服务端调用微信官方 gameMsgSecCheck（文本内容安全识别）完成；
+// - web 端保留本地词库兜底（官方接口仅限服务器端调用，且需要 openid）。
+// 本文件同时提供本地词库检测器与微信接口结果映射。
 import { DEFAULT_SENSITIVE_WORDS } from './sensitive-words.js';
 
 export { DEFAULT_SENSITIVE_WORDS } from './sensitive-words.js';
@@ -62,4 +63,38 @@ export const sensitiveChecker = createSensitiveWordChecker();
 /** 便捷方法：检测文本是否包含敏感词。 */
 export function checkSensitive(value: string): SensitiveCheckResult {
   return sensitiveChecker.check(value);
+}
+
+/** gameMsgSecCheck 场景枚举：1 资料;2 评论;3 论坛;4 社交日志;5 聊天。 */
+export const MSG_SEC_CHECK_SCENE = { profile: 1, comment: 2, forum: 3, socialLog: 4, chat: 5 } as const;
+export type MsgSecCheckScene = (typeof MSG_SEC_CHECK_SCENE)[keyof typeof MSG_SEC_CHECK_SCENE];
+
+/** gameMsgSecCheck 接口版本，固定值 2。 */
+export const MSG_SEC_CHECK_VERSION = 2;
+
+/** 命中标签枚举：见官方文档 Res.result.label。 */
+export const MSG_SEC_CHECK_LABELS: Record<number, string> = {
+  100: '正常',
+  10001: '营销广告',
+  20001: '时政',
+  20002: '色情',
+  20003: '辱骂',
+  20006: '违法犯罪',
+  20012: '低俗',
+  21000: '其他',
+};
+
+/** 微信 gameMsgSecCheck 响应中与判定相关的字段。 */
+export interface MsgSecCheckPayload {
+  errcode?: number;
+  errmsg?: string;
+  result?: { suggest?: string; label?: number; replaced_content?: string };
+}
+
+/** 根据微信 gameMsgSecCheck 响应映射为统一检测结果。 */
+export function mapMsgSecCheckResult(payload: MsgSecCheckPayload): SensitiveCheckResult {
+  const label = payload.result?.label ?? 100;
+  if (payload.result?.suggest !== 'risky') return { hit: false, words: [], message: '' };
+  const text = MSG_SEC_CHECK_LABELS[label] ?? '其他';
+  return { hit: true, words: [], message: `内容包含${text}类违规信息，请修改后再提交。` };
 }

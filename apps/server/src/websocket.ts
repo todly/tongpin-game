@@ -13,6 +13,7 @@ export function validRequest(event: string, data: unknown): boolean {
   if (event === 'lobby:ready') return typeof data === 'boolean';
   if (!object(data)) return false;
   switch (event) {
+    case 'wechat:login': return string(data.code, 128) && !!data.code;
     case 'room:create': return data.nickname === undefined || string(data.nickname, 20);
     case 'room:join': return string(data.code, 6) && (data.nickname === undefined || string(data.nickname, 20));
     case 'room:reconnect': return string(data.roomCode, 6) && string(data.playerId, 64) && string(data.reconnectToken, 64);
