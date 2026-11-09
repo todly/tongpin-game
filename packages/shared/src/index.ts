@@ -24,8 +24,6 @@ export type TimeSyncRequest=null;
 export interface TimeSyncResponse{receivedAt:number;sentAt:number}
 export interface ClientToServerEvents{
   'time:sync':(p:TimeSyncRequest,a:Ack<TimeSyncResponse>)=>void;
-  // 微信端连接后上报 wx.login 的 code，服务端换取 openid 用于内容安全识别。
-  'wechat:login':(p:{code:string},a?:Ack<null>)=>void;
  'room:create':(p:{nickname?:string},a:Ack<SessionPayload>)=>void;'room:join':(p:{code:string;nickname?:string},a:Ack<SessionPayload>)=>void;'room:reconnect':(p:SessionPayload,a:Ack<SessionPayload>)=>void;'room:leave':(a?:Ack<null>)=>void;
  'lobby:rename':(n:string,a?:Ack<null>)=>void;'lobby:ready':(r:boolean,a?:Ack<null>)=>void;'lobby:settings':(s:Partial<Settings>,a?:Ack<null>)=>void;
  'game:submit':(p:{word:string;roundId:string},a?:Ack<null>)=>void;'group:propose':(p:RoundRef&{word:string},a?:Ack<null>)=>void;'group:approve':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:confirm':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:reject':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:chat':(p:{text:string;roundId:string},a?:Ack<null>)=>void;'game:rematch':(p:{gameId:string},a?:Ack<null>)=>void;

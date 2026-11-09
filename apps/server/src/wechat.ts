@@ -1,39 +1,31 @@
-// 微信官方内容安全识别（gameMsgSecCheck）客户端。
-// 文档：POST https://api.weixin.qq.com/wxa/game/content_spam/msg_sec_check?access_token=ACCESS_TOKEN
-// 仅限服务器端调用；access_token 由本模块统一缓存与刷新。
-// 所有调用都会输出一行日志，便于在微信云托管日志中确认是否真正调用了官方接口。
+// 微信云托管「开放接口服务」云调用客户端。
+// 文档：https://developers.weixin.qq.com/miniprogram/dev/wxcloudservice/wxcloudrun/src/development/openapi/
+//
+// 云调用要点：
+// 1. 容器内用 HTTP 请求 api.weixin.qq.com（内网旁加载代理），无需 access_token；
+// 2. openid 由云托管在请求头 x-wx-openid 中自动注入，无需 wx.login 换 code；
+// 3. 需在控制台「云调用-微信令牌权限配置」中开通 /wxa/game/content_spam/msg_sec_check；
+// 4. 回包 Header 带 x-openapi-seqid 表示确实走了云调用链路。
 import { MSG_SEC_CHECK_VERSION, mapMsgSecCheckResult, type MsgSecCheckPayload, type MsgSecCheckScene, type SensitiveCheckResult } from '@word-sync/shared';
 
-const API_BASE = 'https://api.weixin.qq.com';
-/** access_token 提前 5 分钟刷新，避免临界过期。 */
-const TOKEN_SAFETY_WINDOW_MS = 5 * 60 * 1000;
+/** 云调用固定使用 HTTP 内网域名，HTTPS 需额外信任容器内自签证书。 */
+const DEFAULT_API_BASE = 'http://api.weixin.qq.com';
 /** 官方建议超时 1s，这里留出链路余量。 */
 const REQUEST_TIMEOUT_MS = 3000;
 
 const SCENE_NAMES: Record<number, string> = { 1: '资料', 2: '评论', 3: '论坛', 4: '社交日志', 5: '聊天' };
 
 export interface WechatApiOptions {
-  appid: string;
-  secret: string;
+  /** 云调用无需 appid/secret，保留用于日志与资源复用场景的 from_appid。 */
+  appid?: string;
+  /** 资源复用时指定归属小程序，会作为 from_appid 参数附加。 */
+  fromAppid?: string;
+  /** 微信 API 域名，默认云调用内网地址。 */
+  apiBase?: string;
   /** 注入 fetch 便于测试。 */
   fetch?: typeof fetch;
-  /** 注入当前时间便于测试。 */
-  now?: () => number;
   /** 注入日志输出，默认写 stdout；测试环境静默。 */
   log?: (line: string) => void;
-}
-
-interface TokenCache {
-  token: string;
-  expiresAt: number;
-}
-
-interface Code2SessionResponse {
-  openid?: string;
-  session_key?: string;
-  unionid?: string;
-  errcode?: number;
-  errmsg?: string;
 }
 
 /** 微信接口返回的业务错误。 */
@@ -44,7 +36,7 @@ export class WechatApiError extends Error {
   }
 }
 
-/** 内容安全识别不可用（未配置凭据、网络失败、接口报错等）。 */
+/** 内容安全识别不可用（网络失败、接口报错等）。 */
 export class ContentSecurityUnavailableError extends Error {
   constructor(message: string, readonly cause?: unknown) {
     super(message);
@@ -64,34 +56,42 @@ export function maskAppId(appid: string): string {
   return `${appid.slice(0, 4)}****${appid.slice(-4)}`;
 }
 
+/** 提取底层网络错误码，便于定位 DNS/连接/超时问题。 */
+export function describeError(error: unknown): string {
+  const cause = (error as ContentSecurityUnavailableError)?.cause as any;
+  const code = cause?.code ?? cause?.cause?.code;
+  const detail = cause?.message ?? (error as Error)?.message ?? String(error);
+  return code ? `${code} ${detail}` : detail;
+}
+
 export class WechatContentSecurity {
-  private token?: TokenCache;
-  private pendingToken?: Promise<string>;
-  private readonly fetchImpl: typeof fetch;
-  private readonly now: () => number;
   private readonly log: (line: string) => void;
+  private readonly apiBase: string;
   private announced = false;
+  /** 最近一次调用是否命中云调用链路（回包带 x-openapi-seqid）。 */
+  private lastSeqId?: string;
 
-  constructor(private readonly options: WechatApiOptions) {
-    this.fetchImpl = options.fetch ?? globalThis.fetch;
-    this.now = options.now ?? Date.now;
+  constructor(private readonly options: WechatApiOptions = {}) {
     this.log = options.log ?? defaultLog;
+    this.apiBase = (options.apiBase ?? DEFAULT_API_BASE).replace(/\/$/, '');
   }
 
-  /** 是否已配置 appid/secret，未配置时调用方应回退到本地词库。 */
+  /** 云调用始终可用（不依赖本地凭据），保留该属性兼容调用方判断。 */
   get configured(): boolean {
-    return !!this.options.appid && !!this.options.secret;
+    return true;
   }
 
-  /** 首次使用时打印一次配置状态，便于确认线上是否读到凭据。 */
+  /** 最近一次云调用链路标识，undefined 表示未走云调用或尚未调用。 */
+  get seqId(): string | undefined {
+    return this.lastSeqId;
+  }
+
+  /** 首次使用时打印一次配置状态，便于确认线上是否启用云调用。 */
   announce() {
     if (this.announced) return;
     this.announced = true;
-    if (this.configured) {
-      this.log(`[内容安全] 已启用微信官方接口，appid=${maskAppId(this.options.appid)}`);
-    } else {
-      this.log('[内容安全] 未配置 WECHAT_APPID / WECHAT_APPSECRET，全部使用本地词库');
-    }
+    const appid = this.options.appid ? ` appid=${maskAppId(this.options.appid)}` : '';
+    this.log(`[内容安全] 已启用微信云调用（开放接口服务）api=${this.apiBase}${appid}`);
   }
 
   /** 记录一条非接口调用事件（如回退本地词库），便于线上排查。 */
@@ -99,47 +99,14 @@ export class WechatContentSecurity {
     this.log(`[内容安全] ${detail}`);
   }
 
-  /** 主动探测 access_token 是否可用，用于线上自检。 */
-  async probeToken(): Promise<{ ok: boolean; error?: string }> {
-    if (!this.configured) return { ok: false, error: '未配置 WECHAT_APPID / WECHAT_APPSECRET。' };
-    try {
-      await this.accessToken();
-      return { ok: true };
-    } catch (error) {
-      return { ok: false, error: (error as Error).message };
-    }
-  }
-
-  /** 用 wx.login 的 code 换取 openid。 */
-  async code2Session(code: string): Promise<string> {
-    this.announce();
-    const started = Date.now();
-    try {
-      const url = new URL(`${API_BASE}/sns/jscode2session`);
-      url.searchParams.set('appid', this.options.appid);
-      url.searchParams.set('secret', this.options.secret);
-      url.searchParams.set('js_code', code);
-      url.searchParams.set('grant_type', 'authorization_code');
-      const payload = await this.request<Code2SessionResponse>(url, { method: 'GET' });
-      if (payload.errcode) throw new WechatApiError(payload.errcode, payload.errmsg ?? '微信登录失败。');
-      if (!payload.openid) throw new WechatApiError(-1, '微信登录未返回 openid。');
-      this.log(`[内容安全] code2session 成功 openid=${payload.openid.slice(0, 6)}*** ${Date.now() - started}ms`);
-      return payload.openid;
-    } catch (error) {
-      this.log(`[内容安全] code2session 失败 ${Date.now() - started}ms errcode=${(error as WechatApiError).code ?? '-'} ${(error as Error).message}`);
-      throw error;
-    }
-  }
-
-  /** 调用 gameMsgSecCheck 检测文本内容。 */
+  /** 调用 gameMsgSecCheck 检测文本内容。openid 来自云托管请求头 x-wx-openid。 */
   async msgSecCheck(input: { openid: string; content: string; scene: MsgSecCheckScene; nickname?: string }): Promise<SensitiveCheckResult> {
     this.announce();
     const started = Date.now();
     const scene = SCENE_NAMES[input.scene] ?? String(input.scene);
     try {
-      const token = await this.accessToken();
-      const url = new URL(`${API_BASE}/wxa/game/content_spam/msg_sec_check`);
-      url.searchParams.set('access_token', token);
+      const url = new URL(`${this.apiBase}/wxa/game/content_spam/msg_sec_check`);
+      if (this.options.fromAppid) url.searchParams.set('from_appid', this.options.fromAppid);
       const body: Record<string, unknown> = {
         openid: input.openid,
         version: MSG_SEC_CHECK_VERSION,
@@ -147,58 +114,32 @@ export class WechatContentSecurity {
         content: input.content,
       };
       if (input.nickname) body.nickname = input.nickname;
-      const payload = await this.request<MsgSecCheckPayload>(url, {
+      const { payload, seqId } = await this.request<MsgSecCheckPayload>(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
       if (payload.errcode) throw new WechatApiError(payload.errcode, payload.errmsg ?? '内容安全识别失败。');
       const result = mapMsgSecCheckResult(payload);
-      this.log(`[内容安全] msgSecCheck 成功 scene=${scene} 字数=${input.content.length} suggest=${payload.result?.suggest ?? '-'} label=${payload.result?.label ?? '-'} ${Date.now() - started}ms`);
+      const via = seqId ? `云调用=${seqId}` : '云调用=未命中(检查开放接口服务开关与权限配置)';
+      this.log(`[内容安全] msgSecCheck 成功 scene=${scene} 字数=${input.content.length} suggest=${payload.result?.suggest ?? '-'} label=${payload.result?.label ?? '-'} ${via} ${Date.now() - started}ms`);
       return result;
     } catch (error) {
-      this.log(`[内容安全] msgSecCheck 失败 scene=${scene} 字数=${input.content.length} ${Date.now() - started}ms errcode=${(error as WechatApiError).code ?? '-'} ${(error as Error).message}`);
+      this.log(`[内容安全] msgSecCheck 失败 scene=${scene} 字数=${input.content.length} ${Date.now() - started}ms errcode=${(error as WechatApiError).code ?? '-'} ${describeError(error)}`);
       throw error;
     }
   }
 
-  /** 获取并缓存 access_token，并发请求共享同一次刷新。 */
-  private async accessToken(): Promise<string> {
-    const cached = this.token;
-    if (cached && cached.expiresAt > this.now()) return cached.token;
-    if (this.pendingToken) return this.pendingToken;
-    this.pendingToken = this.refreshToken().finally(() => { this.pendingToken = undefined; });
-    return this.pendingToken;
-  }
-
-  private async refreshToken(): Promise<string> {
-    const started = Date.now();
-    try {
-      const url = new URL(`${API_BASE}/cgi-bin/token`);
-      url.searchParams.set('grant_type', 'client_credential');
-      url.searchParams.set('appid', this.options.appid);
-      url.searchParams.set('secret', this.options.secret);
-      const payload = await this.request<{ access_token?: string; expires_in?: number; errcode?: number; errmsg?: string }>(url, { method: 'GET' });
-      if (payload.errcode || !payload.access_token) {
-        throw new WechatApiError(payload.errcode ?? -1, payload.errmsg ?? '获取 access_token 失败。');
-      }
-      const ttl = Math.max(60_000, (payload.expires_in ?? 7200) * 1000 - TOKEN_SAFETY_WINDOW_MS);
-      this.token = { token: payload.access_token, expiresAt: this.now() + ttl };
-      this.log(`[内容安全] access_token 获取成功 有效期=${Math.round(ttl / 1000)}s ${Date.now() - started}ms`);
-      return payload.access_token;
-    } catch (error) {
-      this.log(`[内容安全] access_token 获取失败 ${Date.now() - started}ms errcode=${(error as WechatApiError).code ?? '-'} ${(error as Error).message}`);
-      throw error;
-    }
-  }
-
-  private async request<T>(url: URL, init: RequestInit): Promise<T> {
+  private async request<T>(url: URL, init: RequestInit): Promise<{ payload: T; seqId?: string }> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      const response = await this.fetchImpl(url, { ...init, signal: controller.signal });
+      // 延迟解析 fetch，便于测试替换全局实现。
+      const response = await (this.options.fetch ?? globalThis.fetch)(url, { ...init, signal: controller.signal });
       if (!response.ok) throw new ContentSecurityUnavailableError(`微信接口 HTTP ${response.status}。`);
-      return (await response.json()) as T;
+      const seqId = response.headers.get('x-openapi-seqid') ?? undefined;
+      if (seqId) this.lastSeqId = seqId;
+      return { payload: (await response.json()) as T, seqId };
     } catch (error) {
       if (error instanceof WechatApiError || error instanceof ContentSecurityUnavailableError) throw error;
       throw new ContentSecurityUnavailableError('微信接口请求失败。', error);

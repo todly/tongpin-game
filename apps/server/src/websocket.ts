@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Server as HttpServer } from 'node:http';
+import type { IncomingMessage, Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { ClientToServerEvents, RoomState } from '@word-sync/shared';
 import type { GameConnection } from './connection.js';
@@ -13,7 +13,6 @@ export function validRequest(event: string, data: unknown): boolean {
   if (event === 'lobby:ready') return typeof data === 'boolean';
   if (!object(data)) return false;
   switch (event) {
-    case 'wechat:login': return string(data.code, 128) && !!data.code;
     case 'room:create': return data.nickname === undefined || string(data.nickname, 20);
     case 'room:join': return string(data.code, 6) && (data.nickname === undefined || string(data.nickname, 20));
     case 'room:reconnect': return string(data.roomCode, 6) && string(data.playerId, 64) && string(data.reconnectToken, 64);
@@ -26,12 +25,20 @@ export function validRequest(event: string, data: unknown): boolean {
     default: return false;
   }
 }
+/** 从云托管注入的请求头读取微信用户 openid。 */
+export function readOpenid(request: IncomingMessage): string | undefined {
+  const value = request.headers['x-wx-openid'];
+  const openid = Array.isArray(value) ? value[0] : value;
+  return typeof openid === 'string' && openid ? openid : undefined;
+}
 class NativeConnection implements GameConnection {
   readonly id = `ws-${randomUUID()}`;
+  readonly openid?: string;
   private listeners = new Map<string, (...args: any[]) => void>();
   private seen = new Set<string>();
   alive = true;
-  constructor(private ws: WebSocket) {
+  constructor(private ws: WebSocket, openid?: string) {
+    this.openid = openid;
     ws.on('pong', () => { this.alive = true; });
     ws.on('close', () => this.listeners.get('disconnect')?.());
     ws.on('error', () => ws.close());
@@ -73,8 +80,8 @@ export function attachWebSocket(httpServer: HttpServer, game: GameService) {
     wss.handleUpgrade(request, socket, head, ws => wss.emit('connection', ws, request));
   });
   const connections = new Set<NativeConnection>();
-  wss.on('connection', ws => {
-    const connection = new NativeConnection(ws); connections.add(connection); game.bind(connection);
+  wss.on('connection', (ws, request) => {
+    const connection = new NativeConnection(ws, readOpenid(request)); connections.add(connection); game.bind(connection);
     ws.on('close', () => connections.delete(connection));
   });
   const interval = setInterval(() => connections.forEach(c => c.heartbeat()), 25000);

@@ -22,18 +22,10 @@ export class GameStore {
   private emit(){for(const fn of this.listeners)fn();}
   private queue(){clearTimeout(this.retry);if(!this.background)this.retry=setTimeout(()=>{void this.connect();},1500);}
   private save(s:SessionPayload){this.session=s;this.storage.setStorageSync('word-sync-session',s);}
-  // 微信端内容安全识别需要 openid：连接后用 wx.login 的 code 换取。
-  // 上报失败不阻断连接，服务端会回退本地词库。
-  private login(){
-    try{
-      wx.login({success:(r:any)=>{if(r?.code)void this.transport.request('wechat:login',{code:r.code}).catch(()=>{});},fail:()=>{}});
-    }catch{/* 未配置或登录失败时，服务端使用本地词库兜底。 */}
-  }
   async connect(){
     if(this.background||this.connecting||this.connected)return;
     const generation=this.generation;this.connecting=true;clearTimeout(this.retry);
     try{await this.transport.connect();if(generation!==this.generation)return;this.connected=true;this.identityAck=false;this.freshState=false;this.error='';
-      this.login();
       if(this.session){try{this.save(await this.transport.request<SessionPayload>('room:reconnect',this.session));}catch(e){if((e as Error).message==='会话已过期。'){this.session=undefined;this.room=undefined;this.storage.removeStorageSync('word-sync-session');}else throw e;}}
       if(generation!==this.generation)return;
       this.identityAck=true;this.restored=!this.session||this.freshState&&!!(this.room as RoomState|undefined)?.players.some(p=>p.id===this.session?.playerId);

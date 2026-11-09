@@ -1,104 +1,98 @@
 import { describe, expect, it, vi } from 'vitest';
-import { WechatContentSecurity, WechatApiError, ContentSecurityUnavailableError, maskAppId } from '../src/wechat.js';
+import { WechatContentSecurity, WechatApiError, ContentSecurityUnavailableError, maskAppId, describeError } from '../src/wechat.js';
 
-const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
+const json = (value: unknown, status = 200, headers: Record<string, string> = {}) =>
+  new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json', ...headers } });
 
-function client(responses: Array<() => Response | Promise<Response>>, now = () => 0) {
+function client(responses: Array<() => Response | Promise<Response>>, options: { fromAppid?: string; apiBase?: string } = {}) {
   const calls: string[] = [];
+  const bodies: any[] = [];
   const logs: string[] = [];
-  const fetchImpl = vi.fn(async (input: any) => {
+  const fetchImpl = vi.fn(async (input: any, init?: any) => {
     calls.push(String(input));
+    if (init?.body) bodies.push(JSON.parse(String(init.body)));
     const next = responses.shift();
     if (!next) throw new Error('unexpected request');
     return next();
   });
-  const security = new WechatContentSecurity({ appid: 'wx-test', secret: 'secret-test', fetch: fetchImpl as any, now, log: (line) => logs.push(line) });
-  return { security, calls, fetchImpl, logs };
+  const security = new WechatContentSecurity({ appid: 'wx-test', fetch: fetchImpl as any, log: (line) => logs.push(line), ...options });
+  return { security, calls, bodies, fetchImpl, logs };
 }
 
-describe('微信内容安全客户端', () => {
-  it('未配置凭据时 configured 为 false', () => {
-    expect(new WechatContentSecurity({ appid: '', secret: '' }).configured).toBe(false);
-    expect(new WechatContentSecurity({ appid: 'wx', secret: 's' }).configured).toBe(true);
+describe('微信云调用内容安全客户端', () => {
+  it('云调用无需本地凭据，configured 恒为 true', () => {
+    expect(new WechatContentSecurity({ log: () => {} }).configured).toBe(true);
   });
 
-  it('code2Session 换取 openid', async () => {
-    const { security, calls } = client([() => json({ openid: 'openid-1', session_key: 'k' })]);
-    await expect(security.code2Session('code-1')).resolves.toBe('openid-1');
-    expect(calls[0]).toContain('/sns/jscode2session');
-    expect(calls[0]).toContain('js_code=code-1');
+  it('默认使用云调用内网 HTTP 域名与游戏专用接口', async () => {
+    const { security, calls } = client([() => json({ errcode: 0, result: { suggest: 'pass', label: 100 } })]);
+    await security.msgSecCheck({ openid: 'o-1', content: '正常文本', scene: 5 });
+    expect(calls[0]).toBe('http://api.weixin.qq.com/wxa/game/content_spam/msg_sec_check');
   });
 
-  it('code2Session 业务错误抛出 WechatApiError', async () => {
-    const { security } = client([() => json({ errcode: 40029, errmsg: 'invalid code' })]);
-    await expect(security.code2Session('bad')).rejects.toBeInstanceOf(WechatApiError);
+  it('请求体包含 openid、version=2、scene 与 content', async () => {
+    const { security, bodies } = client([() => json({ errcode: 0, result: { suggest: 'pass', label: 100 } })]);
+    await security.msgSecCheck({ openid: 'o-1', content: '最新队换马嗖红胡子攻略团', scene: 5 });
+    expect(bodies[0]).toEqual({ openid: 'o-1', version: 2, scene: 5, content: '最新队换马嗖红胡子攻略团' });
   });
 
-  it('msgSecCheck 复用 access_token 并映射 risky 结果', async () => {
-    const { security, calls } = client([
-      () => json({ access_token: 'token-1', expires_in: 7200 }),
-      () => json({ errcode: 0, result: { suggest: 'risky', label: 20003 } }),
-      () => json({ errcode: 0, result: { suggest: 'pass', label: 100 } }),
-    ]);
-    const first = await security.msgSecCheck({ openid: 'o', content: '脏话', scene: 5 });
-    expect(first.hit).toBe(true);
-    expect(first.message).toContain('辱骂');
-    const second = await security.msgSecCheck({ openid: 'o', content: '正常', scene: 5 });
-    expect(second.hit).toBe(false);
-    expect(calls.filter((url) => url.includes('/cgi-bin/token'))).toHaveLength(1);
-    expect(calls.filter((url) => url.includes('/msg_sec_check'))).toHaveLength(2);
+  it('传入 nickname 时附加到请求体', async () => {
+    const { security, bodies } = client([() => json({ errcode: 0, result: { suggest: 'pass', label: 100 } })]);
+    await security.msgSecCheck({ openid: 'o-1', content: '文本', scene: 1, nickname: '快乐苹果' });
+    expect(bodies[0].nickname).toBe('快乐苹果');
   });
 
-  it('access_token 过期后重新获取', async () => {
-    let now = 0;
-    const { security, calls } = client([
-      () => json({ access_token: 'token-1', expires_in: 7200 }),
-      () => json({ errcode: 0, result: { suggest: 'pass', label: 100 } }),
-      () => json({ access_token: 'token-2', expires_in: 7200 }),
-      () => json({ errcode: 0, result: { suggest: 'pass', label: 100 } }),
-    ], () => now);
-    await security.msgSecCheck({ openid: 'o', content: 'a', scene: 5 });
-    now = 7200 * 1000;
-    await security.msgSecCheck({ openid: 'o', content: 'b', scene: 5 });
-    expect(calls.filter((url) => url.includes('/cgi-bin/token'))).toHaveLength(2);
+  it('配置 fromAppid 时附加 from_appid 查询参数', async () => {
+    const { security, calls } = client([() => json({ errcode: 0, result: { suggest: 'pass', label: 100 } })], { fromAppid: 'wx-from' });
+    await security.msgSecCheck({ openid: 'o-1', content: '文本', scene: 5 });
+    expect(calls[0]).toContain('from_appid=wx-from');
   });
 
-  it('并发请求共享同一次 token 刷新', async () => {
-    const { security, calls } = client([
-      () => json({ access_token: 'token-1', expires_in: 7200 }),
-      () => json({ errcode: 0, result: { suggest: 'pass', label: 100 } }),
-      () => json({ errcode: 0, result: { suggest: 'pass', label: 100 } }),
-    ]);
-    await Promise.all([
-      security.msgSecCheck({ openid: 'o', content: 'a', scene: 5 }),
-      security.msgSecCheck({ openid: 'o', content: 'b', scene: 5 }),
-    ]);
-    expect(calls.filter((url) => url.includes('/cgi-bin/token'))).toHaveLength(1);
+  it('risky 结果映射为命中并带标签文案', async () => {
+    const { security } = client([() => json({ errcode: 0, result: { suggest: 'risky', label: 20003 } })]);
+    const result = await security.msgSecCheck({ openid: 'o', content: '脏话', scene: 5 });
+    expect(result.hit).toBe(true);
+    expect(result.message).toContain('辱骂');
+  });
+
+  it('pass 结果不拦截', async () => {
+    const { security } = client([() => json({ errcode: 0, result: { suggest: 'pass', label: 100 } })]);
+    const result = await security.msgSecCheck({ openid: 'o', content: '正常', scene: 5 });
+    expect(result.hit).toBe(false);
+    expect(result.message).toBe('');
+  });
+
+  it('记录回包 x-openapi-seqid 作为云调用链路凭证', async () => {
+    const { security, logs } = client([() => json({ errcode: 0, result: { suggest: 'pass', label: 100 } }, 200, { 'x-openapi-seqid': 'seq-123' })]);
+    await security.msgSecCheck({ openid: 'o', content: '文本', scene: 5 });
+    expect(security.seqId).toBe('seq-123');
+    expect(logs.join('\n')).toContain('云调用=seq-123');
+  });
+
+  it('缺少 x-openapi-seqid 时日志提示检查开关与权限', async () => {
+    const { security, logs } = client([() => json({ errcode: 0, result: { suggest: 'pass', label: 100 } })]);
+    await security.msgSecCheck({ openid: 'o', content: '文本', scene: 5 });
+    expect(security.seqId).toBeUndefined();
+    expect(logs.join('\n')).toContain('未命中');
   });
 
   it('接口业务错误抛出 WechatApiError', async () => {
-    const { security } = client([
-      () => json({ access_token: 'token-1', expires_in: 7200 }),
-      () => json({ errcode: 40003, errmsg: 'invalid openid' }),
-    ]);
+    const { security } = client([() => json({ errcode: 40003, errmsg: 'invalid openid' })]);
     await expect(security.msgSecCheck({ openid: 'bad', content: 'a', scene: 5 })).rejects.toBeInstanceOf(WechatApiError);
   });
 
   it('HTTP 失败抛出 ContentSecurityUnavailableError', async () => {
     const { security } = client([() => json({}, 500)]);
-    await expect(security.code2Session('code')).rejects.toBeInstanceOf(ContentSecurityUnavailableError);
+    await expect(security.msgSecCheck({ openid: 'o', content: 'a', scene: 5 })).rejects.toBeInstanceOf(ContentSecurityUnavailableError);
   });
 
   it('网络异常包装为 ContentSecurityUnavailableError', async () => {
     const { security } = client([() => { throw new Error('network down'); }]);
-    await expect(security.code2Session('code')).rejects.toBeInstanceOf(ContentSecurityUnavailableError);
+    await expect(security.msgSecCheck({ openid: 'o', content: 'a', scene: 5 })).rejects.toBeInstanceOf(ContentSecurityUnavailableError);
   });
 
-  it('日志包含调用类型、场景、字数与结果，且不含原文', async () => {
-    const { security, logs } = client([
-      () => json({ access_token: 'token-1', expires_in: 7200 }),
-      () => json({ errcode: 0, result: { suggest: 'risky', label: 20003 } }),
-    ]);
+  it('成功日志包含场景、字数、结果与耗时，且不含原文', async () => {
+    const { security, logs } = client([() => json({ errcode: 0, result: { suggest: 'risky', label: 20003 } })]);
     await security.msgSecCheck({ openid: 'o', content: '这是一段很长的敏感原文', scene: 5 });
     const text = logs.join('\n');
     expect(text).toContain('msgSecCheck 成功');
@@ -110,41 +104,37 @@ describe('微信内容安全客户端', () => {
   });
 
   it('失败日志包含 errcode 与原因', async () => {
-    const { security, logs } = client([
-      () => json({ access_token: 'token-1', expires_in: 7200 }),
-      () => json({ errcode: 40003, errmsg: 'invalid openid' }),
-    ]);
+    const { security, logs } = client([() => json({ errcode: 40003, errmsg: 'invalid openid' })]);
     await expect(security.msgSecCheck({ openid: 'bad', content: 'a', scene: 5 })).rejects.toBeInstanceOf(WechatApiError);
     const text = logs.join('\n');
     expect(text).toContain('msgSecCheck 失败');
     expect(text).toContain('errcode=40003');
   });
 
-  it('announce 只打印一次配置状态', () => {
+  it('announce 只打印一次并说明云调用与脱敏 appid', () => {
     const logs: string[] = [];
-    const security = new WechatContentSecurity({ appid: 'wx1234567890abcdef', secret: 's', log: (line) => logs.push(line) });
+    const security = new WechatContentSecurity({ appid: 'wx1234567890abcdef', log: (line) => logs.push(line) });
     security.announce();
     security.announce();
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain('已启用微信官方接口');
+    expect(logs[0]).toContain('云调用');
     expect(logs[0]).toContain('wx12****cdef');
   });
 
-  it('未配置时 announce 提示使用本地词库', () => {
+  it('note 输出回退原因', () => {
     const logs: string[] = [];
-    new WechatContentSecurity({ appid: '', secret: '', log: (line) => logs.push(line) }).announce();
-    expect(logs[0]).toContain('未配置');
-    expect(logs[0]).toContain('本地词库');
-  });
-
-  it('probeToken 在未配置时返回错误', async () => {
-    const security = new WechatContentSecurity({ appid: '', secret: '', log: () => {} });
-    await expect(security.probeToken()).resolves.toEqual({ ok: false, error: '未配置 WECHAT_APPID / WECHAT_APPSECRET。' });
+    new WechatContentSecurity({ log: (line) => logs.push(line) }).note('无 openid，使用本地词库');
+    expect(logs[0]).toContain('无 openid');
   });
 
   it('appid 脱敏', () => {
     expect(maskAppId('')).toBe('');
     expect(maskAppId('wx1234567890abcdef')).toBe('wx12****cdef');
     expect(maskAppId('short')).toBe('sh****');
+  });
+
+  it('describeError 提取底层网络错误码', () => {
+    const error = new ContentSecurityUnavailableError('微信接口请求失败。', Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
+    expect(describeError(error)).toContain('ECONNREFUSED');
   });
 });
