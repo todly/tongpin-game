@@ -90,7 +90,7 @@ async function saveImages() {
     </template>
     <template v-else-if="game.room.view === 'writing'">
       <text class="title">第 {{ game.room.round }} 回合<template v-if="seconds !== undefined"> · {{ seconds }} 秒</template></text>
-      <view v-if="lastRound" class="card"><text class="hint">上轮词语 · 第 {{ lastRound.round }} 回合</text><view v-for="entry in lastRound.submissions" :key="entry.playerId"><text :style="{ color: playerColor(entry.colorId) }">{{ entry.nickname }}：{{ entry.timedOut ? '时间到' : entry.word || '空白' }}</text></view></view>
+      <view v-if="lastRound" class="card"><text class="hint">上轮词语</text><view v-for="entry in lastRound.submissions" :key="entry.playerId"><text :style="{ color: playerColor(entry.colorId) }">{{ entry.nickname }}：{{ entry.timedOut ? '时间到' : entry.word || '空白' }}</text></view></view>
       <text v-else>{{ game.myGroup ? '提议一个小组候选词' : '写下你觉得其他人也会写的词' }}</text>
       <input v-model="word" maxlength="40" :disabled="submitted || !game.available || !!game.room.proposals.length" placeholder="相信你的直觉" @input="guard('word').input($event.detail.value)" />
       <button :disabled="submitted || !game.available || !!game.room.proposals.length" @click="submitWord">{{ submitted ? '已锁定' : game.myGroup ? '提出候选词' : '锁定这个词' }}</button>
