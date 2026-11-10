@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import type {FeedItem,RoomState,RoundHistory,Submission} from '@word-sync/shared';
 import {Layout} from '../src/ui/layout';
-import {historyLayout} from '../src/ui/history';
+import {historyLayout,submissionRows} from '../src/ui/history';
 import {reportPages} from '../src/utils/report';
 
 const measure=(value:string,size=15)=>Array.from(value).length*size*.55;
@@ -19,4 +19,16 @@ describe('共享历史布局',()=>{
  it('空 feed 即使展开也没有 divider，长文本均不越过大卡右边界',()=>{const value=new Layout(320,measure);historyLayout(value,room([round(1)]),new Map([[1,true]]));const outer=value.nodes.find(node=>node.kind==='box'&&node.fill==='#202238')!;expect(value.nodes.some(node=>node.kind==='box'&&node.h===1&&node.fill==='#403957')).toBe(false);for(const node of value.nodes.filter(node=>node!==outer))expect(node.x+node.w).toBeLessThanOrEqual(outer.x+outer.w);});
  it('报告复用同一结构，logs 开关控制全部日志并保持单页结果',()=>{const state=room([round(1,[feed('chat','甲','正文')])]);const without=reportPages(state,false,measure),withLogs=reportPages(state,true,measure);expect(without).toHaveLength(1);expect(withLogs).toHaveLength(1);expect(withLogs[0]!.nodes.some(node=>node.fill==='#2b2e46')).toBe(true);expect(without[0]!.nodes.some(node=>node.fill==='#2b2e46')).toBe(false);expect(withLogs[0]!.height).toBeGreaterThan(without[0]!.height);});
  it('30轮报告尾部完整且最后一轮文字存在于图片预算内',()=>{const state=room(Array.from({length:30},(_,index)=>round(index+1,[feed('chat','甲',`第${index+1}轮正文`)])));const [page]=reportPages(state,true,measure);expect(page).toBeDefined();const last=page!.nodes.filter(node=>node.lines?.join('').includes('第 30 回合'));expect(last).toHaveLength(1);expect(Math.max(...page!.nodes.map(node=>node.y+node.h))).toBeLessThanOrEqual(page!.height);expect(page!.width*page!.height).toBeLessThanOrEqual(48_000_000);});
+});
+describe('写词页上轮词语复用答案行',()=>{
+ it('submissionRows 独立渲染紧凑答案行，与历史页结构一致',()=>{
+  const value=new Layout(375,measure);
+  submissionRows(value,[submission('a','长昵称玩家甲','灵感词'.repeat(18),false,0),submission('b','玩家乙','',true,1)]);
+  const rows=value.nodes.filter(node=>node.kind==='box'&&node.fill==='#292b43');
+  expect(rows).toHaveLength(2);
+  const texts=value.nodes.flatMap(node=>node.lines||[]);
+  expect(texts).toContain('长昵称玩家甲');
+  expect(texts).toContain('未作答');
+  expect(value.nodes.some(node=>node.fill==='#202238')).toBe(false);
+ });
 });

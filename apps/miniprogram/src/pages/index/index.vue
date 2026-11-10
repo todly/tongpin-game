@@ -15,6 +15,8 @@ onShareAppMessage(() => ({ title: '来同频词，看看我们能否想到一起
 watch(() => game.me?.nickname, value => { if (value) nickname.value = value; });
 watch(() => game.room, (room, previous) => { if (room) { word.value = syncInput(word.value, previous, room, game.session?.playerId || ''); countdown.anchor(room); } if (room?.roundId !== previous?.roundId) { chat.value = ''; history.value = false; } });
 const submitted = computed(() => game.room?.submittedPlayerIds.includes(game.me?.id || ''));
+// 上轮所有玩家的词语：首回合没有历史时为空，此时保留原提示语。
+const lastRound = computed(() => game.room?.history[game.room.history.length - 1]);
 const seconds = computed(() => { void tick.value; const remaining = countdown.remaining(game.room?.view === 'reveal' ? 'reveal' : 'writing'); return remaining === undefined ? undefined : Math.max(0, Math.ceil(remaining / 1000)); });
 async function act(event: string, data: unknown = null) { try { await game.act(event, data); } catch {} }
 // 房主移出玩家前二次确认，避免误触。
@@ -88,7 +90,8 @@ async function saveImages() {
     </template>
     <template v-else-if="game.room.view === 'writing'">
       <text class="title">第 {{ game.room.round }} 回合<template v-if="seconds !== undefined"> · {{ seconds }} 秒</template></text>
-      <text>{{ game.myGroup ? '提议一个小组候选词' : '写下你觉得其他人也会写的词' }}</text>
+      <view v-if="lastRound" class="card"><text class="hint">上轮词语 · 第 {{ lastRound.round }} 回合</text><view v-for="entry in lastRound.submissions" :key="entry.playerId"><text :style="{ color: playerColor(entry.colorId) }">{{ entry.nickname }}：{{ entry.timedOut ? '时间到' : entry.word || '空白' }}</text></view></view>
+      <text v-else>{{ game.myGroup ? '提议一个小组候选词' : '写下你觉得其他人也会写的词' }}</text>
       <input v-model="word" maxlength="40" :disabled="submitted || !game.available || !!game.room.proposals.length" placeholder="相信你的直觉" @input="guard('word').input($event.detail.value)" />
       <button :disabled="submitted || !game.available || !!game.room.proposals.length" @click="submitWord">{{ submitted ? '已锁定' : game.myGroup ? '提出候选词' : '锁定这个词' }}</button>
       <view v-for="group in game.room.currentGroups" :key="group.id" class="card"><text>永久同频小组：</text><text v-for="id in group.members" :key="id" :style="{ color: playerColor(game.room.players.find(p => p.id === id)?.colorId) }">{{ game.room.players.find(p => p.id === id)?.nickname }} </text></view>

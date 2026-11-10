@@ -30,6 +30,8 @@ watch(() => game.me?.nickname, (value) => { if (value) nickname.value = value; }
 watch(() => game.room, (room, previous) => { if(room)word.value=syncInput(word.value,previous,room,game.session?.playerId??''); if(room?.roundId!==previous?.roundId){chat.value='';showHistory.value=false;} }, { immediate:true });
 watch(() => game.room?.phase, () => { showHistory.value = false; });
 const seconds = computed(() => Math.max(0, Math.ceil(((game.room?.deadline ?? now.value) - now.value) / 1000)));
+// 上轮所有玩家的词语：首回合没有历史时为空，此时保留原提示语。
+const lastRound = computed(() => game.room?.history[game.room.history.length - 1]);
 const submitted = computed(() => game.room?.submittedPlayerIds.includes(game.me?.id ?? '') ?? false);
 // 同组成员放在同一边框内，个人颜色仍保持独立。
 const progressGroups = computed(() => {
@@ -77,7 +79,8 @@ function rename() { act(() => game.rename(nickname.value)); }
 
     <template v-else-if="game.room.view === 'writing'">
       <div class="round-top"><div><p class="eyebrow">第 {{ game.room.round }}/{{ game.room.settings.maxRounds }} 回合</p><h2>en一个词。<br>想到一起。</h2></div><div class="timer">{{ seconds }}<small>秒</small></div></div>
-      <div class="card prompt"><span>✦</span><p>写下你觉得其他人也会写的那个词。</p></div>
+      <div v-if="lastRound" class="card last-round"><p class="eyebrow">上轮词语 · 第 {{ lastRound.round }} 回合</p><div v-for="entry in lastRound.submissions" :key="entry.playerId" class="history-row"><span><PlayerName :name="entry.nickname" :color-id="entry.colorId" /></span><b>{{ entry.timedOut ? '—' : entry.word || '（空白）' }}</b></div></div>
+      <div v-else class="card prompt"><span>✦</span><p>写下你觉得其他人也会写的那个词。</p></div>
       <form @submit.prevent="submitWord"><label>{{ game.myGroup ? '小组候选词' : '你的词' }}</label><input v-model="word" class="word-input" maxlength="40" :disabled="submitted || !game.available || !!game.room.proposals.length" placeholder="相信你的直觉…" @input="guard('word').input(($event.target as HTMLInputElement).value)"><button class="primary" :disabled="submitted || !game.available || !!game.room.proposals.length">{{ submitted ? '已锁定 ✓' : game.myGroup ? '提出候选词' : '锁定这个词' }}</button></form>
       <div class="submission-progress"><div class="progress-teams"><section v-for="team in progressGroups" :key="team.id" class="progress-team" :aria-label="team.label"><div class="progress-members"><span v-for="player in team.players" :key="player.id" :class="{ done: game.room.submittedPlayerIds.includes(player.id) }" :style="{ color: playerColor(player.colorId), background: playerColor(player.colorId) + '22', border: '1px solid ' + playerColor(player.colorId), opacity: 1 }" :title="player.nickname + (game.room.submittedPlayerIds.includes(player.id) ? '：已提交' : '：未提交')">{{ player.nickname[0] }}<i v-if="game.room.submittedPlayerIds.includes(player.id)" class="progress-check">✓</i></span></div></section></div><p>已有 {{ game.room.submittedPlayerIds.length }}/{{ game.room.players.length }} 人提交</p></div>
       <div class="card group-feed"><h3>{{ game.myGroup ? '小组聊天' : '我的思考' }}</h3><Timeline :items="game.room.currentFeed" /><form class="inline" @submit.prevent="sendChat"><input v-model="chat" maxlength="200" :placeholder="game.myGroup ? '仅同组成员可见' : '仅自己可见，记下你的思考'" @input="guard('chat').input(($event.target as HTMLInputElement).value)"><button :disabled="!game.available || !chat.trim()">发送</button></form></div>
