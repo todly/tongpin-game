@@ -110,6 +110,58 @@ describe('内容安全校验接入', () => {
     expect(good.ok).toBe(true);
   });
 
+  it('content:check 只读校验命中时返回提示，且不产生房间', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => wechatResponse({ errcode: 0, result: { suggest: 'risky', label: 20003 } })));
+
+    const socket = await connect({ 'x-wx-openid': 'openid-1' });
+    const result = await request(socket, 'content:check', { text: '任意内容', scene: 5 });
+
+    expect(result.ok).toBe(true);
+    expect(result.data.hit).toBe(true);
+    expect(result.data.message).toContain('辱骂');
+  });
+
+  it('content:check 通过时返回未命中', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => wechatResponse({ errcode: 0, result: { suggest: 'pass', label: 100 } })));
+
+    const socket = await connect({ 'x-wx-openid': 'openid-1' });
+    const result = await request(socket, 'content:check', { text: '正常内容', scene: 5 });
+
+    expect(result.ok).toBe(true);
+    expect(result.data.hit).toBe(false);
+  });
+
+  it('content:check 空文本直接通过且不请求微信', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const socket = await connect({ 'x-wx-openid': 'openid-1' });
+    const result = await request(socket, 'content:check', { text: '   ', scene: 5 });
+
+    expect(result.ok).toBe(true);
+    expect(result.data.hit).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('content:check 无 openid 时使用本地词库', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const socket = await connect();
+    const bad = await request(socket, 'content:check', { text: '傻逼', scene: 5 });
+    expect(bad.data.hit).toBe(true);
+    expect(bad.data.message).toContain('敏感词');
+
+    const good = await request(socket, 'content:check', { text: '星空', scene: 5 });
+    expect(good.data.hit).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('content:check 拒绝超长文本', async () => {
+    const socket = await connect({ 'x-wx-openid': 'openid-1' });
+    const result = await request(socket, 'content:check', { text: 'a'.repeat(2501) });
+    expect(result.ok).toBe(false);
+  });
   it('云调用业务错误同样回退本地词库', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => wechatResponse({ errcode: 750031, errmsg: '该游戏不支持' })));
 

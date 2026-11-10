@@ -35,6 +35,8 @@ export class GameStore {
   hide(){this.background=true;this.generation++;clearTimeout(this.retry);this.retry=undefined;this.connecting=false;this.connected=false;this.restored=false;this.busy=false;this.transport.close();this.emit();}
   show(){this.background=false;void this.connect();}
   round(){return {roundId:this.room!.roundId,proposalVersion:this.room!.proposalVersion};}
+  /** 只读内容安全校验，供输入过程中实时检测。 */
+  check(text:string,scene?:number){return this.transport.request<{hit:boolean;message:string}>('content:check',{text,scene});}
   async act(event:string,data:unknown=null){
     const r=this.room;
     try{

@@ -1,4 +1,4 @@
-import { randomNickname, playerColor, orderedTimeline, formatEvent, normalizeNickname, normalizeWord } from '@word-sync/shared';
+import { randomNickname, playerColor, orderedTimeline, formatEvent, normalizeNickname, normalizeWord, createContentGuard } from '@word-sync/shared';
 import { GameStore } from './stores/game';
 import { Keyboard } from './ui/keyboard';
 import { Clipboard } from './platform/clipboard';
@@ -19,7 +19,18 @@ let body:Layout,header:Layout,footer:Layout,viewport={x:0,y:0,w:0,h:0};
 function resize(){const info=wx.getSystemInfoSync();width=info.windowWidth;height=info.windowHeight;fullHeight=keyboard.state==='idle'?height:Math.max(fullHeight,height);const dpr=info.pixelRatio||1;canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);top=Math.max(16,info.safeArea?.top||0);try{const rect=wx.getMenuButtonBoundingClientRect?.();top=Math.max(top,rect&&Number.isFinite(rect.bottom)&&rect.bottom>0?rect.bottom+12:top+48);}catch{top+=48;}bottom=Math.max(16,height-(info.safeArea?.bottom||height));draw();}
 function run(event:string,data:unknown=null){keyboard.close();if(event==='room:create'||event==='room:join')data={...(data as object),nickname:normalizeNickname(nickname),...(event==='room:join'?{code:code.trim().toUpperCase()}: {})};if(event==='lobby:rename')data=normalizeNickname(nickname);if(event==='game:submit'||event==='group:propose')data={...(data as object),word:normalizeWord(game.word)};toast.clear();void game.act(event,data).catch(()=>{draw();});}
 function stamp(){return `${game.room?.view}|${game.room?.roundId}|${game.candidate?.id}|${game.submitted}|${game.session?.playerId}`;}
-function input(kind:'nickname'|'code'|'word'|'chat'){const key=stamp();keyboard.open(kind,{nickname,code,word:game.word,chat}[kind],()=>active&&key===stamp()&&game.available,v=>{if(kind==='nickname')nickname=v;if(kind==='code')code=v;if(kind==='word')game.word=v;if(kind==='chat')chat=v;draw();});}
+// 输入即校验：命中敏感词立即清空输入框，避免违规内容停留在输入框里。
+const guards:Record<string,ReturnType<typeof createContentGuard>>={};
+function guard(kind:'nickname'|'word'|'chat'){
+  return guards[kind]??=createContentGuard({
+    check:text=>game.check(text,kind==='nickname'?1:5),
+    onHit:message=>{
+      if(kind==='nickname')nickname='';else if(kind==='word')game.word='';else chat='';
+      keyboard.clear(kind);toast.push(message);draw();
+    },
+  });
+}
+function input(kind:'nickname'|'code'|'word'|'chat'){const key=stamp();keyboard.open(kind,{nickname,code,word:game.word,chat}[kind],()=>active&&key===stamp()&&game.available,v=>{if(kind==='nickname')nickname=v;if(kind==='code')code=v;if(kind==='word')game.word=v;if(kind==='chat')chat=v;if(kind!=='code')guard(kind).input(v);draw();});}
 function copyCode(){clipboard.copy(game.room?.code||'');}
 function share(){wx.shareAppMessage({title:'来同频脑电波，看看我们能否想到一起',query:game.room?`roomCode=${encodeURIComponent(game.room.code)}`:''});}
 async function generate(){if(!game.room||exporting)return;const identity=game.session?.playerId,gameId=game.room.gameId;exporting=true;draw();try{const generated=await exportReport(JSON.parse(JSON.stringify(game.room)),logs);if(identity!==game.session?.playerId||gameId!==game.room?.gameId)return;files=generated;toast.push(`图片已生成，点击查看图片后可长按自行保存。`);}catch(e){toast.push((e as Error).message);}finally{exporting=false;draw();}}

@@ -9,6 +9,7 @@ const object = (x: unknown): x is Record<string, unknown> => !!x && typeof x ===
 const string = (x: unknown, max = 200) => typeof x === 'string' && x.length <= max;
 export function validRequest(event: string, data: unknown): boolean {
   if (event === 'room:leave') return data == null;
+  if (event === 'content:check') return object(data) && string(data.text, 2500) && (data.scene === undefined || typeof data.scene === 'number');
   if (event === 'lobby:rename') return string(data, 20);
   if (event === 'lobby:ready') return typeof data === 'boolean';
   if (!object(data)) return false;

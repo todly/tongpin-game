@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { createContentGuard } from '@word-sync/shared';
 import { useRouter } from 'vue-router';
 import { useGameStore } from '../stores/game';
 const game = useGameStore(); const router = useRouter();
 const nickname = ref(''); const code = ref(''); const joining = ref(false);
-// 敏感词校验统一由服务端完成（web 端使用本地词库兜底），前端不再预检。
+// 输入即校验：命中敏感词立即清空输入框，避免违规内容停留在输入框里。
+const nicknameGuard = createContentGuard({
+  check: text => game.check(text, 1),
+  onHit: message => { nickname.value = ''; game.error = message; },
+});
 async function create() { try { await game.create(nickname.value); await router.push('/room'); } catch {} }
 async function join() { try { await game.join(code.value, nickname.value); await router.push('/room'); } catch {} }
 </script>
@@ -14,7 +19,7 @@ async function join() { try { await game.join(code.value, nickname.value); await
     <h1>同频<br><span>脑电波</span></h1>
     <p class="lede">不交流，也能想到一起。和朋友写下相同的词，找到所有人共享的那个念头。</p>
     <form class="card home-card" @submit.prevent="joining ? join() : create()">
-      <label>你的昵称 <small>可选</small></label><input v-model="nickname" maxlength="20" placeholder="随机昵称也很有趣">
+      <label>你的昵称 <small>可选</small></label><input v-model="nickname" maxlength="20" placeholder="随机昵称也很有趣" @input="nicknameGuard.input(nickname)">
       <label v-if="joining">房间码 <small>加入房间时填写</small></label><input v-if="joining" v-model="code" maxlength="6" class="code-input" placeholder="ABC123" @input="code = code.toUpperCase()">
       <p v-if="game.session">正在恢复已有房间，请等待连接；网络错误不会清除会话。</p><p v-else-if="!game.connected">正在连接服务器…</p>
       <p v-if="game.error" class="error">{{ game.error }}</p>

@@ -41,10 +41,12 @@ export const useGameStore = defineStore('game', () => {
     } catch (e) { error.value = (e as Error).message; throw e; }
   }
   const round = () => ({ roundId: room.value!.roundId, proposalVersion: room.value!.proposalVersion });
+  /** 只读内容安全校验，供输入过程中实时检测。 */
+  function check(text: string, scene?: number) { return transport.request<{ hit: boolean; message: string }>('content:check', { text, scene }); }
   function hide() { background = true; restored.value = false; }
   function show() {
     if (background) { background = false; transport.close(); connected.value = false; restored.value = false; }
     void connect();
   }
-  return { room, session, connected, available, error, me, myGroup, isOwner, canLeave, connect, hide, show, act, round };
+  return { room, session, connected, available, error, me, myGroup, isOwner, canLeave, connect, hide, show, act, round, check };
 });

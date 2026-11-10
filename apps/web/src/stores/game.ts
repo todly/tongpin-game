@@ -80,6 +80,8 @@ export const useGameStore = defineStore('game', () => {
     confirm: (proposalId: string) => emit('group:confirm', { proposalId, roundId: room.value?.roundId, proposalVersion: room.value?.proposalVersion }),
     reject: (proposalId: string) => emit('group:reject', { proposalId, roundId: room.value?.roundId, proposalVersion: room.value?.proposalVersion }),
     chat: (text: string) => emit('group:chat', { text, roundId: room.value?.roundId }),
-    rematch: () => emit('game:rematch', {gameId:room.value?.gameId}), leave, clear
+    rematch: () => emit('game:rematch', {gameId:room.value?.gameId}), leave, clear,
+    /** 只读内容安全校验，供输入过程中实时检测；失败不写入全局 error，避免打断输入。 */
+    check: async (text: string, scene?: number) => { try { return await emit<{ hit: boolean; message: string }>('content:check', { text, scene }); } catch { return { hit: false, message: '' }; } },
   };
 });

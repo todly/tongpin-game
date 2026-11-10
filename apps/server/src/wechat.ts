@@ -73,7 +73,8 @@ export class WechatContentSecurity {
 
   constructor(private readonly options: WechatApiOptions = {}) {
     this.log = options.log ?? defaultLog;
-    this.apiBase = (options.apiBase ?? DEFAULT_API_BASE).replace(/\/$/, '');
+    // 空字符串（如 .env 中留空的 WECHAT_API_BASE=）同样回退默认域名。
+    this.apiBase = (options.apiBase?.trim() || DEFAULT_API_BASE).replace(/\/$/, '');
   }
 
   /** 云调用始终可用（不依赖本地凭据），保留该属性兼容调用方判断。 */

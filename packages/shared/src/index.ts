@@ -1,5 +1,7 @@
 export { orderedTimeline, formatEvent } from './timeline.js';
 export { syncInput } from './inputSync.js';
+export { createContentGuard } from './contentGuard.js';
+export type { ContentGuardOptions } from './contentGuard.js';
 export { normalizeEpoch, SafeMonotonic, StateCountdown } from './time.js';
 export type { ClockDiagnostic, EpochValue, SafeMonotonicOptions } from './time.js';
 export { DEFAULT_SENSITIVE_WORDS, normalizeForSensitiveCheck, createSensitiveWordChecker, sensitiveChecker, checkSensitive, MSG_SEC_CHECK_SCENE, MSG_SEC_CHECK_VERSION, MSG_SEC_CHECK_LABELS, mapMsgSecCheckResult } from './sensitive.js';
@@ -24,12 +26,16 @@ export type TimeSyncRequest=null;
 export interface TimeSyncResponse{receivedAt:number;sentAt:number}
 export interface ClientToServerEvents{
   'time:sync':(p:TimeSyncRequest,a:Ack<TimeSyncResponse>)=>void;
+  /** 只读内容安全校验：输入过程中实时检测，不产生业务副作用。 */
+  'content:check':(p:{text:string;scene?:number},a:Ack<ContentCheckResult>)=>void;
  'room:create':(p:{nickname?:string},a:Ack<SessionPayload>)=>void;'room:join':(p:{code:string;nickname?:string},a:Ack<SessionPayload>)=>void;'room:reconnect':(p:SessionPayload,a:Ack<SessionPayload>)=>void;'room:leave':(a?:Ack<null>)=>void;
  'lobby:rename':(n:string,a?:Ack<null>)=>void;'lobby:ready':(r:boolean,a?:Ack<null>)=>void;'lobby:settings':(s:Partial<Settings>,a?:Ack<null>)=>void;
  'game:submit':(p:{word:string;roundId:string},a?:Ack<null>)=>void;'group:propose':(p:RoundRef&{word:string},a?:Ack<null>)=>void;'group:approve':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:confirm':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:reject':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:chat':(p:{text:string;roundId:string},a?:Ack<null>)=>void;'game:rematch':(p:{gameId:string},a?:Ack<null>)=>void;
 }
 export interface ServerToClientEvents{'room:state':(s:RoomState)=>void;'room:error':(m:string)=>void}
 export type Ack<T>=(r:{ok:true;data:T}|{ok:false;error:string})=>void;
+/** 内容安全实时校验结果。 */
+export interface ContentCheckResult{hit:boolean;message:string}
 // 昵称由前缀与水果独立随机组合，词库保持两字词，避免窄屏输入框截断。
 export const NICKNAME_PREFIXES=['快乐','勇敢','温柔','机灵','悠闲','闪亮','活泼','好奇','安静','元气','认真','迷糊','淡定','热情','冷静','浪漫','倔强','淘气','乖巧','神秘','自在','清醒','软糯','轻盈','可爱','古怪'] as const;
 export const NICKNAME_FRUITS=['苹果','香蕉','草莓','葡萄','西瓜','芒果','蜜桃','柠檬','樱桃','蓝莓','荔枝','橙子','柚子','石榴','菠萝','椰子','木瓜','杨梅','枇杷','山楂','桑葚','李子','杏子','柿子','青提','雪梨','甘蔗','榴莲','芭乐','释迦','杨桃','龙眼'] as const;
