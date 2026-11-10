@@ -19,7 +19,7 @@ async function join() { try { await game.join(code.value, nickname.value); await
     <h1>同频<br><span>脑电波</span></h1>
     <p class="lede">不交流，也能想到一起。和朋友写下相同的词，找到所有人共享的那个念头。</p>
     <form class="card home-card" @submit.prevent="joining ? join() : create()">
-      <label>你的昵称 <small>可选</small></label><input v-model="nickname" maxlength="20" placeholder="随机昵称也很有趣" @input="nicknameGuard.input(nickname)">
+      <label>你的昵称 <small>可选</small></label><input v-model="nickname" maxlength="20" placeholder="随机昵称也很有趣" @input="nicknameGuard.input(($event.target as HTMLInputElement).value)">
       <label v-if="joining">房间码 <small>加入房间时填写</small></label><input v-if="joining" v-model="code" maxlength="6" class="code-input" placeholder="ABC123" @input="code = code.toUpperCase()">
       <p v-if="game.session">正在恢复已有房间，请等待连接；网络错误不会清除会话。</p><p v-else-if="!game.connected">正在连接服务器…</p>
       <p v-if="game.error" class="error">{{ game.error }}</p>

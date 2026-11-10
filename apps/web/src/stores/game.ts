@@ -40,6 +40,15 @@ export const useGameStore = defineStore('game', () => {
     finally { restoring.value = false; }
   });
   class ServerError extends Error {}
+  /** 只读校验专用：不占用 pending、不写 error，避免打断输入与按钮状态。 */
+  function silent<T>(event: keyof ClientToServerEvents, payload?: unknown): Promise<T> {
+    if (!socket.connected) return Promise.reject(new Error('尚未连接服务器。'));
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('校验超时。')), 5000);
+      const ack: Ack<T> = result => { clearTimeout(timer); result.ok ? resolve(result.data) : reject(new Error(result.error)); };
+      if (payload === undefined) (socket.emit as any)(event, ack); else (socket.emit as any)(event, payload, ack);
+    });
+  }
   function emit<T>(event: keyof ClientToServerEvents, payload?: unknown): Promise<T> {
     if (!socket.connected) { error.value = '尚未连接服务器，请稍后重试。'; return Promise.reject(new Error(error.value)); }
     pending.value++;
@@ -82,6 +91,6 @@ export const useGameStore = defineStore('game', () => {
     chat: (text: string) => emit('group:chat', { text, roundId: room.value?.roundId }),
     rematch: () => emit('game:rematch', {gameId:room.value?.gameId}), leave, clear,
     /** 只读内容安全校验，供输入过程中实时检测；失败不写入全局 error，避免打断输入。 */
-    check: async (text: string, scene?: number) => { try { return await emit<{ hit: boolean; message: string }>('content:check', { text, scene }); } catch { return { hit: false, message: '' }; } },
+    check: async (text: string, scene?: number) => { try { return await silent<{ hit: boolean; message: string }>('content:check', { text, scene }); } catch { return { hit: false, message: '' }; } },
   };
 });
