@@ -28,6 +28,8 @@ export const useGameStore = defineStore('game', () => {
   } catch { persist(); }
   socket.on('room:state', (value) => { room.value = value; });
   socket.on('room:error', (message) => error.value = message);
+  // 被房主移出房间：清除本地会话并提示，避免自动重连回房。
+  socket.on('room:kicked', ({ reason }) => { clear(); error.value = reason; });
   socket.on('disconnect', () => { connected.value = false; error.value = '连接已断开，正在重连…'; for (const cancel of [...cancellations]) cancel(); });
   socket.on('connect_error', () => { connected.value = false; error.value = '无法连接服务器，请检查网络。'; });
   socket.on('connect', async () => {
@@ -76,9 +78,11 @@ export const useGameStore = defineStore('game', () => {
   const isOwner = computed(() => !!session.value && room.value?.ownerId === session.value.playerId);
   const canLeave = computed(() => room.value?.phase === 'lobby' || room.value?.phase === 'ended');
   async function leave() { if (!canLeave.value) return blocked('游戏进行中不能离开房间。'); await emit('room:leave'); clear(); }
+  /** 房主移出其他玩家；服务端负责权限校验。 */
+  function kick(playerId: string) { return isOwner.value && playerId !== session.value?.playerId ? emit('room:kick', { playerId }) : blocked('只有房主可以移出其他玩家。'); }
   socket.connect();
   return {
-    room, session, error, connected, connecting, available, restoring, isOwner, canLeave, me, myGroup,
+    room, session, error, connected, connecting, available, restoring, isOwner, canLeave, me, myGroup, kick,
     create: (nickname?: string) => enter('room:create', { nickname }),
     join: (code: string, nickname?: string) => enter('room:join', { code: code.trim().toUpperCase(), nickname }),
     rename: (nickname: string) => emit('lobby:rename', nickname),

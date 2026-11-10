@@ -7,6 +7,8 @@ export class GameStore {
     const stored=storage.getStorageSync('word-sync-session');
     if(stored&&typeof stored.roomCode==='string'&&typeof stored.playerId==='string'&&typeof stored.reconnectToken==='string')this.session=stored;
     transport.onState=state=>{if(this.background)return;this.word=syncInput(this.word,this.room,state,this.session?.playerId||'');this.transport.countdown?.anchor(state,this.transport.clock.now());this.room=state;this.freshState=true;if(this.identityAck&&state.players.some((p:{id:string})=>p.id===this.session?.playerId))this.restored=true;this.emit();};
+    // 被房主移出房间：清除本地会话并提示，避免自动重连回房。
+    transport.onKicked=({reason})=>{this.session=undefined;this.room=undefined;this.storage.removeStorageSync('word-sync-session');this.error=reason;this.emit();};
     transport.onClose=()=>{this.connected=false;this.restored=false;this.emit();this.queue();};
   }
   get recovering(){return !this.connected||!this.restored||this.background;}
@@ -46,6 +48,7 @@ export class GameStore {
     if(event==='lobby:settings'&&(!this.isOwner||r?.view!=='lobby'))throw new Error('只有大厅房主可以修改设置。');
     if(event.startsWith('lobby:')&&r?.view!=='lobby')throw new Error('请返回大厅操作。');
     if(event==='room:leave'&&r?.phase!=='lobby'&&r?.phase!=='ended')throw new Error('游戏中不能离房。');
+    if(event==='room:kick'&&(!this.isOwner||!r?.players.some(p=>p.id===(data as {playerId?:string})?.playerId&&p.id!==this.session?.playerId)))throw new Error('只有房主可以移出其他玩家。');
     if(event.startsWith('group:')||event==='game:submit'){
       if(r?.view!=='writing')throw new Error('本回合已结束。');
       if(event!=='group:chat'&&this.submitted)throw new Error('本轮已锁定。');

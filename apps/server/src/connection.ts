@@ -11,4 +11,6 @@ export interface GameConnection {
   leave(room: string): unknown;
   disconnect(close?: boolean): unknown;
   emit(event: 'room:state', state: RoomState): unknown;
+  /** 定向通知：目前用于被房主移出房间的玩家。 */
+  emit(event: 'room:kicked', payload: { reason: string }): unknown;
 }

@@ -13,6 +13,8 @@ export const useGameStore = defineStore('game', () => {
   const isOwner = computed(() => room.value?.ownerId === me.value?.id);
   const canLeave = computed(() => room.value?.phase === 'lobby' || room.value?.phase === 'ended');
   transport.onState = state => { room.value = state; if (session.value && state.players.some((p: any) => p.id === session.value!.playerId)) restored.value = true; };
+  // 被房主移出房间：清除本地会话并提示，避免自动重连回房。
+  transport.onKicked = ({ reason }) => { session.value = undefined; room.value = undefined; uni.removeStorageSync('word-sync-session'); error.value = reason; };
   function queue() { clearTimeout(retry); retry = setTimeout(() => { void connect(); }, 1500); }
   transport.onClose = () => { connected.value = false; restored.value = false; queue(); };
   function save(value: SessionPayload) { session.value = value; uni.setStorageSync('word-sync-session', value); }
@@ -40,6 +42,8 @@ export const useGameStore = defineStore('game', () => {
       return value;
     } catch (e) { error.value = (e as Error).message; throw e; }
   }
+  /** 房主移出其他玩家；服务端负责权限校验。 */
+  function kick(playerId: string) { return act('room:kick', { playerId }); }
   const round = () => ({ roundId: room.value!.roundId, proposalVersion: room.value!.proposalVersion });
   /** 只读内容安全校验，供输入过程中实时检测。 */
   function check(text: string, scene?: number) { return transport.request<{ hit: boolean; message: string }>('content:check', { text, scene }); }
@@ -48,5 +52,5 @@ export const useGameStore = defineStore('game', () => {
     if (background) { background = false; transport.close(); connected.value = false; restored.value = false; }
     void connect();
   }
-  return { room, session, connected, available, error, me, myGroup, isOwner, canLeave, connect, hide, show, act, round, check };
+  return { room, session, connected, available, error, me, myGroup, isOwner, canLeave, connect, hide, show, act, kick, round, check };
 });

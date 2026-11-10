@@ -6,6 +6,7 @@ export class Transport {
   private pending = new Map<string, { resolve: (x: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   private heartbeat?: ReturnType<typeof setInterval>;
   onState: (state: any) => void = () => {};
+  onKicked: (payload: { reason: string }) => void = () => {};
   onClose: () => void = () => {};
   async connect(): Promise<void> {
     this.close(); const generation = this.generation;
@@ -32,6 +33,7 @@ export class Transport {
         if (generation !== this.generation || typeof message.data !== 'string') return;
         let value: any; try { value = JSON.parse(message.data); } catch { return; }
         if (value.event === 'room:state') this.onState(value.data);
+        if (value.event === 'room:kicked') this.onKicked(value.data);
         if (value.event === 'ack') {
           const p = this.pending.get(value.requestId); if (!p) return;
           clearTimeout(p.timer); this.pending.delete(value.requestId);

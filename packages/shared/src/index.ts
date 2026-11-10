@@ -29,10 +29,12 @@ export interface ClientToServerEvents{
   /** 只读内容安全校验：输入过程中实时检测，不产生业务副作用。 */
   'content:check':(p:{text:string;scene?:number},a:Ack<ContentCheckResult>)=>void;
  'room:create':(p:{nickname?:string},a:Ack<SessionPayload>)=>void;'room:join':(p:{code:string;nickname?:string},a:Ack<SessionPayload>)=>void;'room:reconnect':(p:SessionPayload,a:Ack<SessionPayload>)=>void;'room:leave':(a?:Ack<null>)=>void;
+ /** 房主将其他玩家移出房间；仅房主可用，不能踢自己。 */
+ 'room:kick':(p:{playerId:string},a:Ack<null>)=>void;
  'lobby:rename':(n:string,a?:Ack<null>)=>void;'lobby:ready':(r:boolean,a?:Ack<null>)=>void;'lobby:settings':(s:Partial<Settings>,a?:Ack<null>)=>void;
  'game:submit':(p:{word:string;roundId:string},a?:Ack<null>)=>void;'group:propose':(p:RoundRef&{word:string},a?:Ack<null>)=>void;'group:approve':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:confirm':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:reject':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:chat':(p:{text:string;roundId:string},a?:Ack<null>)=>void;'game:rematch':(p:{gameId:string},a?:Ack<null>)=>void;
 }
-export interface ServerToClientEvents{'room:state':(s:RoomState)=>void;'room:error':(m:string)=>void}
+export interface ServerToClientEvents{'room:state':(s:RoomState)=>void;'room:error':(m:string)=>void;/** 被房主移出房间时推送给被踢玩家。 */'room:kicked':(m:{reason:string})=>void}
 export type Ack<T>=(r:{ok:true;data:T}|{ok:false;error:string})=>void;
 /** 内容安全实时校验结果。 */
 export interface ContentCheckResult{hit:boolean;message:string}

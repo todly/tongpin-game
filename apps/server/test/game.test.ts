@@ -77,4 +77,44 @@ describe('游戏服务端',()=>{
   const goodWord=await emitAck(a,'game:submit',{word:'星空',roundId:w.roundId});
   expect(goodWord.ok).toBe(true);
  });
+describe('房主踢人',()=>{
+ it('非房主不能踢人，房主可踢且被踢者收到通知并断开',async()=>{
+  const a=await client(),b=await client(),c=await client();
+  const created=await emitAck(a,'room:create',{nickname:'房主'});
+  const code=created.data.roomCode;
+  const bJoined=await emitAck(b,'room:join',{code,nickname:'玩家乙'});
+  await emitAck(c,'room:join',{code,nickname:'玩家丙'});
+  const internal=game.rooms.get(code);
+  // 非房主踢人被拒绝
+  const denied=await emitAck(b,'room:kick',{playerId:created.data.playerId});
+  expect(denied.ok).toBe(false);
+  expect(denied.error).toContain('房主');
+  // 房主踢自己被拒绝
+  const selfKick=await emitAck(a,'room:kick',{playerId:created.data.playerId});
+  expect(selfKick.ok).toBe(false);
+  // 房主踢乙成功，乙收到 room:kicked 通知
+  const kicked=new Promise<any>(resolve=>b.on('room:kicked',resolve));
+  const kickResult=await emitAck(a,'room:kick',{playerId:bJoined.data.playerId});
+  expect(kickResult.ok).toBe(true);
+  const notice=await kicked;
+  expect(notice.reason).toContain('移出');
+  // 乙的会话被清除，重连失败
+  expect(internal.players.has(bJoined.data.playerId)).toBe(false);
+  // 丙仍在房间
+  const after=await state(a,v=>v.players.length===2);
+  expect(after.players.map((p:any)=>p.nickname)).toEqual(['房主','玩家丙']);
+ });
+ it('写词阶段踢人后若全员已提交则立即揭晓',async()=>{
+  const r=await room(['甲','乙','丙']);
+  // 甲乙已提交，踢掉未提交的丙后应立即揭晓
+  await emitAck(r.sockets[0]!,'game:submit',{word:'星',roundId:r.writing.roundId});
+  await emitAck(r.sockets[1]!,'game:submit',{word:'星',roundId:r.writing.roundId});
+  const reveal=state(r.sockets[0]!,v=>v.phase==='reveal');
+  const kickResult=await emitAck(r.sockets[0]!,'room:kick',{playerId:r.sessions[2].playerId});
+  expect(kickResult.ok).toBe(true);
+  const revealed=await reveal;
+  expect(revealed.visibleSubmissions).toHaveLength(2);
+  expect(revealed.visibleSubmissions.every((s:any)=>s.word==='星')).toBe(true);
+ });
+});
 });

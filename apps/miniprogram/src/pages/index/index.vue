@@ -17,6 +17,8 @@ watch(() => game.room, (room, previous) => { if (room) { word.value = syncInput(
 const submitted = computed(() => game.room?.submittedPlayerIds.includes(game.me?.id || ''));
 const seconds = computed(() => { void tick.value; const remaining = countdown.remaining(game.room?.view === 'reveal' ? 'reveal' : 'writing'); return remaining === undefined ? undefined : Math.max(0, Math.ceil(remaining / 1000)); });
 async function act(event: string, data: unknown = null) { try { await game.act(event, data); } catch {} }
+// 房主移出玩家前二次确认，避免误触。
+function kick(playerId: string, nickname: string) { uni.showModal({ title: '移出玩家', content: `确定将「${nickname}」移出房间吗？`, success: result => { if (result.confirm) act('room:kick', { playerId }); } }); }
 // 输入即校验：命中敏感词立即清空输入框，避免违规内容停留在输入框里。
 const guards: Record<string, ReturnType<typeof createContentGuard>> = {};
 function guard(kind: 'nickname' | 'word' | 'chat') {
@@ -79,7 +81,7 @@ async function saveImages() {
     <template v-else-if="game.room.view === 'lobby'">
       <text class="title">房间大厅 {{ game.room.players.length }}/6</text>
       <input v-model="nickname" maxlength="20" @input="guard('nickname').input($event.detail.value)" /><button :disabled="!game.available" @click="rename">保存昵称</button>
-      <view v-for="p in game.room.players" :key="p.id" class="card"><text :style="{ color: playerColor(p.colorId) }">{{ p.nickname }}{{ p.id === game.room.ownerId ? '（房主）' : '' }}</text><text class="hint">{{ !p.connected ? '离线，可重连' : game.room.phase === 'ended' && !p.returnedToLobby ? '查看结果中' : p.ready ? '已准备' : '等待准备' }}</text></view>
+      <view v-for="p in game.room.players" :key="p.id" class="card"><text :style="{ color: playerColor(p.colorId) }">{{ p.nickname }}{{ p.id === game.room.ownerId ? '（房主）' : '' }}</text><text class="hint">{{ !p.connected ? '离线，可重连' : game.room.phase === 'ended' && !p.returnedToLobby ? '查看结果中' : p.ready ? '已准备' : '等待准备' }}</text><button v-if="game.isOwner && p.id !== game.room.ownerId" class="kick-button" :disabled="!game.available" size="mini" @click="kick(p.id, p.nickname)">移出</button></view>
       <view class="card"><text>回合计时 {{ game.room.settings.timerSeconds }} 秒</text><slider :value="game.room.settings.timerSeconds" :min="10" :max="180" :step="5" :disabled="!game.available || !game.isOwner" @change="act('lobby:settings', { timerSeconds: $event.detail.value })" /><text>最多 {{ game.room.settings.maxRounds }} 回合</text><slider :value="game.room.settings.maxRounds" :min="1" :max="30" :disabled="!game.available || !game.isOwner" @change="act('lobby:settings', { maxRounds: $event.detail.value })" /><text class="hint">只有房主可以修改设置。</text></view>
       <button :disabled="!game.available" @click="act('lobby:ready', !game.me?.ready)">{{ game.me?.ready ? '取消准备' : '我准备好了' }}</button>
       <text class="hint">全员在线、返回大厅并准备后自动开始。</text>
@@ -105,4 +107,7 @@ async function saveImages() {
   <canvas canvas-id="report" id="report" style="position:fixed;left:-2000px;top:0;width:640px;height:1000px" />
 </view>
 </template>
-<style scoped>.page { padding:24px; padding-bottom:60px; } text { line-height:1.8; }</style>
+<style scoped>.page { padding:24px; padding-bottom:60px; } text { line-height:1.8; }
+/* 房主在大厅玩家卡片上的移出按钮，右对齐不遮挡状态文本。 */
+.card { position:relative; }
+.kick-button { position:absolute; right:12px; top:50%; transform:translateY(-50%); margin:0; line-height:2; background:#f3a8b6; color:#30151d; font-size:12px; }</style>

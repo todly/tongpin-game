@@ -12,6 +12,7 @@ export class Transport {
   private cancelOpen?:()=>void;
   private pending=new Map<string,{resolve:(v:any)=>void;reject:(e:Error)=>void;timer:number}>();
   onState:(s:any)=>void=()=>{};
+  onKicked:(p:{reason:string})=>void=()=>{};
   onClose:()=>void=()=>{};
   constructor(private config=__CONFIG__,private api=wx) {const performance=api.getPerformance?.();if(performance?.now)this.clock=new ServerClock(()=>performance.now());}
   async connect() {
@@ -32,6 +33,7 @@ export class Transport {
         if(generation!==this.generation||typeof message.data!=='string')return;
         let value:any;try{value=JSON.parse(message.data);}catch{return;}
         if(value.event==='room:state')this.onState(value.data);
+        if(value.event==='room:kicked')this.onKicked(value.data);
         if(value.event==='ack'){const p=this.pending.get(value.requestId);if(!p)return;clearTimeout(p.timer);this.pending.delete(value.requestId);value.ok?p.resolve(value.data):p.reject(new Error(value.error||'请求失败。'));}
       });
       const closed=()=>{if(generation!==this.generation)return;clearTimeout(timer);reject(new Error('连接已断开。'));this.close();this.onClose();};

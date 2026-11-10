@@ -17,6 +17,7 @@ export function validRequest(event: string, data: unknown): boolean {
     case 'room:create': return data.nickname === undefined || string(data.nickname, 20);
     case 'room:join': return string(data.code, 6) && (data.nickname === undefined || string(data.nickname, 20));
     case 'room:reconnect': return string(data.roomCode, 6) && string(data.playerId, 64) && string(data.reconnectToken, 64);
+    case 'room:kick': return string(data.playerId, 64);
     case 'lobby:settings': return Object.keys(data).every(k => ['timerSeconds', 'maxRounds'].includes(k) && typeof data[k] === 'number' && Number.isFinite(data[k]));
     case 'game:rematch': return string(data.gameId, 64);
     case 'game:submit': return string(data.roundId, 64) && string(data.word, 40);
@@ -69,7 +70,7 @@ class NativeConnection implements GameConnection {
   on(event: string, listener: (...args: any[]) => void) { this.listeners.set(event, listener); }
   join(_room: string) {} leave(_room: string) {}
   disconnect() { this.ws.close(1000, '会话已被其他连接接管'); }
-  emit(event: 'room:state', data: RoomState) { this.send({ event, data }); }
+  emit(event: 'room:state' | 'room:kicked', data: RoomState | { reason: string }) { this.send({ event, data }); }
   private send(value: unknown) { if (this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(value)); }
   heartbeat() { if (!this.alive) { this.ws.terminate(); return; } this.alive = false; this.ws.ping(); }
 }
