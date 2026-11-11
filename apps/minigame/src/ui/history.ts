@@ -31,14 +31,21 @@ export function submissionRows(l:Layout,submissions:RoundHistory['submissions'])
 }
 
 // 历史页与分享图只使用这一套轮次结构；屏幕可按轮次展开，分享图传 true 即全部展开。
-export function historyLayout(l:Layout,room:RoomState,logs:boolean|RoundLogs,onToggle?:(round:number)=>void){
- for(const round of room.history){
+export function historyLayout(
+ l:Layout,room:RoomState,logs:boolean|RoundLogs,onToggle?:(round:number)=>void,newestFirst=false,
+){
+ const rounds=newestFirst?[...room.history].reverse():room.history;
+ for(const round of rounds){
   const open=logsVisible(logs,round.round),start=l.y,index=l.nodes.length,outerInset=l.inset;
   l.inset+=16;
   const badgeY=start+16,badgeW=Math.max(74,l.measure(`第 ${round.round} 回合`,11,600).width+24);
   l.box(badgeY,26,l.inset,badgeW,'#d8ff72','',13);
   l.y=badgeY;l.text(`第 ${round.round} 回合`,11,'#17191f',l.inset,badgeW,'center',600,0);Object.assign(l.nodes[l.nodes.length-1]!,{y:badgeY,h:26,baseline:'middle'});l.y=badgeY+26+12;
-  submissionRows(l,round.submissions);
+  if(typeof logs!=='boolean'&&round.feed.length&&onToggle){
+   const label=open?'收起本轮日志':`展开本轮日志 · ${round.feed.length}`;
+   const toggle=l.button(label,()=>onToggle(round.round),true,l.inset,l.contentWidth,'#282b42','#d9d9e6',34);
+   toggle.size=12;
+  }
   if(open&&round.feed.length){
    l.y+=4;l.box(l.y,1,l.inset,l.contentWidth,'#403957','',0);l.y+=12;
    for(const item of orderedTimeline(round.feed)){
@@ -56,9 +63,8 @@ export function historyLayout(l:Layout,room:RoomState,logs:boolean|RoundLogs,onT
     l.inset=itemInset;l.y+=5;
    }
   }
-  if(typeof logs!=='boolean'&&round.feed.length&&onToggle){
-   const y=l.y;l.y+=4;const toggle=l.button(open?'收起本轮日志':`展开本轮日志 · ${round.feed.length}`,()=>onToggle(round.round),true,l.inset,l.contentWidth,'#282b42','#d9d9e6',34);toggle.size=12;l.y=y+44;
-  }
+  if(open&&round.feed.length)l.y+=8;
+  submissionRows(l,round.submissions);
   l.inset=outerInset;l.y+=14;
   l.nodes.splice(index,0,{kind:'box',x:outerInset,y:start,w:l.width-outerInset*2,h:l.y-start,fill:'#202238',stroke:'#403957',radius:18});
   l.y+=16;

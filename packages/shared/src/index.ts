@@ -8,7 +8,7 @@ export { DEFAULT_SENSITIVE_WORDS, normalizeForSensitiveCheck, createSensitiveWor
 export type { SensitiveCheckResult, SensitiveWordOptions, MsgSecCheckScene, MsgSecCheckPayload } from './sensitive.js';
 export const MIN_PLAYERS=2, MAX_PLAYERS=6, DEFAULT_TIMER=60, DEFAULT_MAX_ROUNDS=10, MIN_TIMER=10, MAX_TIMER=180, MIN_ROUNDS=1, MAX_ROUNDS=30;
 export type RoomPhase='lobby'|'writing'|'reveal'|'ended';
-export interface Settings{timerSeconds:number;maxRounds:number}
+export interface Settings{timerSeconds:number;maxRounds:number;preventRepeatWords?:boolean}
 export type ColorId=0|1|2|3|4|5;
 export const PLAYER_COLORS={dark:['#ff9fae','#ffc078','#ffe680','#83e2b5','#8acbff','#cbb0ff'],light:['#a01938','#964500','#756000','#006844','#005da0','#6633a5']};
 export function playerColor(id:ColorId=0,theme:'dark'|'light'='dark'){return PLAYER_COLORS[theme][id]}
@@ -44,7 +44,15 @@ export const NICKNAME_FRUITS=['苹果','香蕉','草莓','葡萄','西瓜','芒�
 export function randomNickname(random=Math.random){return `${NICKNAME_PREFIXES[Math.floor(random()*NICKNAME_PREFIXES.length)]!}${NICKNAME_FRUITS[Math.floor(random()*NICKNAME_FRUITS.length)]!}`}
 export function normalizeNickname(v?:string){return v?.trim().replace(/\s+/g,' ').slice(0,20)||randomNickname()}
 export function normalizeWord(v:string){return v.trim().replace(/\s+/g,' ').slice(0,40)}
-export function sanitizeSettings(s:Partial<Settings>,c:Settings){const t=Math.round(Number(s.timerSeconds??c.timerSeconds)),r=Math.round(Number(s.maxRounds??c.maxRounds));return{timerSeconds:Math.min(MAX_TIMER,Math.max(MIN_TIMER,Number.isFinite(t)?t:c.timerSeconds)),maxRounds:Math.min(MAX_ROUNDS,Math.max(MIN_ROUNDS,Number.isFinite(r)?r:c.maxRounds))}}
+export function sanitizeSettings(s:Partial<Settings>,c:Settings):Settings{
+ const t=Math.round(Number(s.timerSeconds??c.timerSeconds)),r=Math.round(Number(s.maxRounds??c.maxRounds));
+ const preventRepeatWords=typeof s.preventRepeatWords==='boolean'?s.preventRepeatWords:c.preventRepeatWords;
+ return {
+  timerSeconds:Math.min(MAX_TIMER,Math.max(MIN_TIMER,Number.isFinite(t)?t:c.timerSeconds)),
+  maxRounds:Math.min(MAX_ROUNDS,Math.max(MIN_ROUNDS,Number.isFinite(r)?r:c.maxRounds)),
+  ...(preventRepeatWords===undefined?{}:{preventRepeatWords}),
+ };
+}
 export function mergeGroups(existing:Group[],confirmed:GroupProposal[],players:Player[],round:number):Group[]{
  const validIds=new Set(players.map(p=>p.id));confirmed=confirmed.filter(p=>p.word.trim()&&p.memberIds.every(id=>validIds.has(id)));const sets=existing.map(g=>new Set(g.members.filter(id=>validIds.has(id)))); for(const p of confirmed){if(!p.word.trim()||p.memberIds.some(id=>!validIds.has(id)))continue;const overlapping=sets.filter(s=>p.memberIds.some(id=>s.has(id)));const merged=new Set(p.memberIds);for(const s of overlapping)for(const id of s)merged.add(id);for(const s of overlapping)sets.splice(sets.indexOf(s),1);sets.push(merged)}
  return sets.filter(s=>s.size>1).map((s,i)=>{const prior=existing.find(g=>g.members.some(id=>s.has(id)));const proposal=confirmed.find(p=>p.memberIds.some(id=>s.has(id)));const members=[...s];return{id:prior?.id??`group-${round}-${i+1}`,word:proposal?.word??prior?.word??'',members,memberNames:members.map(id=>players.find(p=>p.id===id)?.nickname??id),createdRound:prior?.createdRound??round}})
