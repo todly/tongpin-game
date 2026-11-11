@@ -42,7 +42,7 @@ export interface ContentCheckResult{hit:boolean;message:string}
 export const NICKNAME_PREFIXES=['快乐','勇敢','温柔','机灵','悠闲','闪亮','活泼','好奇','安静','元气','认真','迷糊','淡定','热情','冷静','浪漫','倔强','淘气','乖巧','神秘','自在','清醒','软糯','轻盈','可爱','古怪'] as const;
 export const NICKNAME_FRUITS=['苹果','香蕉','草莓','葡萄','西瓜','芒果','蜜桃','柠檬','樱桃','蓝莓','荔枝','橙子','柚子','石榴','菠萝','椰子','木瓜','杨梅','枇杷','山楂','桑葚','李子','杏子','柿子','青提','雪梨','甘蔗','榴莲','芭乐','释迦','杨桃','龙眼'] as const;
 export function randomNickname(random=Math.random){return `${NICKNAME_PREFIXES[Math.floor(random()*NICKNAME_PREFIXES.length)]!}${NICKNAME_FRUITS[Math.floor(random()*NICKNAME_FRUITS.length)]!}`}
-export function normalizeNickname(v?:string){return v?.trim().replace(/\s+/g,' ').slice(0,20)||randomNickname()}
+export function normalizeNickname(v?:string){return Array.from(v?.trim().replace(/\s+/g,' ')||'').slice(0,12).join('')||randomNickname()}
 export function normalizeWord(v:string){return v.trim().replace(/\s+/g,' ').slice(0,40)}
 export function sanitizeSettings(s:Partial<Settings>,c:Settings):Settings{
  const t=Math.round(Number(s.timerSeconds??c.timerSeconds)),r=Math.round(Number(s.maxRounds??c.maxRounds));

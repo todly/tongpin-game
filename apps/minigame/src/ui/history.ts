@@ -13,18 +13,23 @@ function eventParts(item:RoundHistory['feed'][number]){
  return [{text:value,color:'#c6cedd'}];
 }
 
-// 紧凑答案行：昵称与词语同行展示，窄屏自动分层；历史页与写词页的上轮词语共用。
+// 紧凑答案行：昵称单行超宽省略，与词语垂直居中；历史页与写词页的上轮词语共用。
 export function submissionRows(l:Layout,submissions:RoundHistory['submissions']){
  for(const submission of submissions){
   const rowY=l.y,rowX=l.inset,rowW=l.contentWidth,paddingX=9,paddingY=8,accent=playerColor(submission.colorId),contentX=rowX+paddingX,contentW=rowW-paddingX*2;
-  const nicknameSize=12,wordSize=15,nicknameW=Math.min(128,Math.max(54,l.measure(submission.nickname,nicknameSize,600).width)),word=submission.timedOut?'未作答':submission.word||'空白',wordColor=submission.timedOut||!submission.word?'#888ba3':'#eee8ff';
-  const sameLine=contentW-nicknameW-10>=Math.max(70,Math.min(l.measure(word,wordSize,600).width,contentW*.54));
-  l.y=rowY+paddingY;l.text(submission.nickname,nicknameSize,accent,contentX,sameLine?nicknameW:contentW,'left',600,0);
+  const nicknameSize=12,wordSize=15,nicknameW=Math.min(128,contentW*.45,Math.max(54,l.measure(submission.nickname,nicknameSize,600).width)),word=submission.timedOut?'未作答':submission.word||'空白',wordColor=submission.timedOut||!submission.word?'#888ba3':'#eee8ff';
+  const chars=Array.from(submission.nickname.replace(/\s+/g,' '));
+  let name=chars.join('');
+  if(l.measure(name,nicknameSize,600).width>nicknameW){
+   while(chars.length&&l.measure(chars.join('')+'…',nicknameSize,600).width>nicknameW)chars.pop();
+   name=chars.join('')+'…';
+  }
+  l.y=rowY+paddingY;l.text(name,nicknameSize,accent,contentX,nicknameW,'left',600,0);
   const nameNode=l.nodes[l.nodes.length-1]!;
-  l.y=sameLine?rowY+paddingY:rowY+paddingY+nameNode.h+5;
-  l.text(word,wordSize,wordColor,sameLine?contentX+nicknameW+10:contentX,sameLine?contentW-nicknameW-10:contentW,'left',600,0);
-  const wordNode=l.nodes[l.nodes.length-1]!,bottom=Math.max(nameNode.y+nameNode.h,wordNode.y+wordNode.h),rowH=bottom-rowY+paddingY;
-  if(sameLine){Object.assign(nameNode,{y:rowY,h:rowH,baseline:'middle'});Object.assign(wordNode,{y:rowY,h:rowH,baseline:'middle'});}
+  l.y=rowY+paddingY;
+  l.text(word,wordSize,wordColor,contentX+nicknameW+10,contentW-nicknameW-10,'left',600,0);
+  const wordNode=l.nodes[l.nodes.length-1]!,rowH=Math.max(nameNode.h,wordNode.h)+paddingY*2;
+  Object.assign(nameNode,{y:rowY,h:rowH,baseline:'middle'});Object.assign(wordNode,{y:rowY,h:rowH,baseline:'middle'});
   l.nodes.splice(l.nodes.length-2,0,{kind:'box',x:rowX,y:rowY,w:rowW,h:rowH,fill:'#292b43',radius:10});
   l.y=rowY+rowH+8;
  }

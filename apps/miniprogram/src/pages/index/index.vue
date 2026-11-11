@@ -64,7 +64,7 @@ async function saveImages() {
   <text v-if="game.error" class="error">{{ game.error }}</text>
   <template v-if="!game.room">
     <text class="hint">一个词，想到一起。</text>
-    <input v-model="nickname" maxlength="20" placeholder="你的昵称" @input="guard('nickname').input($event.detail.value)" />
+    <input v-model="nickname" maxlength="12" placeholder="你的昵称" @input="guard('nickname').input($event.detail.value)" />
     <button :disabled="!game.available" @click="createRoom">创建房间</button>
     <input v-model="code" maxlength="6" placeholder="输入六位房间码" />
     <button :disabled="!game.available || code.length !== 6" @click="joinRoom">加入房间</button>
@@ -82,7 +82,7 @@ async function saveImages() {
     </template>
     <template v-else-if="game.room.view === 'lobby'">
       <text class="title">房间大厅 {{ game.room.players.length }}/6</text>
-      <input v-model="nickname" maxlength="20" @input="guard('nickname').input($event.detail.value)" /><button :disabled="!game.available" @click="rename">保存昵称</button>
+      <input v-model="nickname" maxlength="12" @input="guard('nickname').input($event.detail.value)" /><button :disabled="!game.available" @click="rename">保存昵称</button>
       <view v-for="p in game.room.players" :key="p.id" class="card"><text :style="{ color: playerColor(p.colorId) }">{{ p.nickname }}{{ p.id === game.room.ownerId ? '（房主）' : '' }}</text><text class="hint">{{ !p.connected ? '离线，可重连' : game.room.phase === 'ended' && !p.returnedToLobby ? '查看结果中' : p.ready ? '已准备' : '等待准备' }}</text><button v-if="game.isOwner && p.id !== game.room.ownerId" class="kick-button" :disabled="!game.available" size="mini" @click="kick(p.id, p.nickname)">移出</button></view>
       <view class="card"><text>回合计时 {{ game.room.settings.timerSeconds }} 秒</text><slider :value="game.room.settings.timerSeconds" :min="10" :max="180" :step="5" :disabled="!game.available || !game.isOwner" @change="act('lobby:settings', { timerSeconds: $event.detail.value })" /><text>最多 {{ game.room.settings.maxRounds }} 回合</text><slider :value="game.room.settings.maxRounds" :min="1" :max="30" :disabled="!game.available || !game.isOwner" @change="act('lobby:settings', { maxRounds: $event.detail.value })" /><text class="hint">只有房主可以修改设置。</text></view>
       <button :disabled="!game.available" @click="act('lobby:ready', !game.me?.ready)">{{ game.me?.ready ? '取消准备' : '我准备好了' }}</button>
