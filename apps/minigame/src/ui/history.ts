@@ -52,7 +52,7 @@ export function historyLayout(
    toggle.size=12;
   }
   if(open&&round.feed.length){
-   l.y+=4;l.box(l.y,1,l.inset,l.contentWidth,'#403957','',0);l.y+=12;
+   l.y+=4;
    for(const item of orderedTimeline(round.feed)){
     const itemStart=l.y,itemIndex=l.nodes.length,itemInset=l.inset;
     l.inset+=10;
@@ -68,7 +68,9 @@ export function historyLayout(
     l.inset=itemInset;l.y+=5;
    }
   }
-  if(open&&round.feed.length)l.y+=8;
+  if(open&&round.feed.length){
+   l.y+=8;l.box(l.y,1,l.inset,l.contentWidth,'#403957','',0);l.y+=12;
+  }
   submissionRows(l,round.submissions);
   l.inset=outerInset;l.y+=14;
   l.nodes.splice(index,0,{kind:'box',x:outerInset,y:start,w:l.width-outerInset*2,h:l.y-start,fill:'#202238',stroke:'#403957',radius:18});
