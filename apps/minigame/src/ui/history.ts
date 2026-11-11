@@ -13,7 +13,7 @@ function eventParts(item:RoundHistory['feed'][number]){
  return [{text:value,color:'#c6cedd'}];
 }
 
-// 紧凑答案行：昵称单行超宽省略，与词语垂直居中；历史页与写词页的上轮词语共用。
+// 紧凑答案行：昵称单行超宽省略，与词语垂直居中；历史页与纪念图共用。
 export function submissionRows(l:Layout,submissions:RoundHistory['submissions']){
  for(const submission of submissions){
   const rowY=l.y,rowX=l.inset,rowW=l.contentWidth,paddingX=9,paddingY=8,accent=playerColor(submission.colorId),contentX=rowX+paddingX,contentW=rowW-paddingX*2;
@@ -49,7 +49,7 @@ export function historyLayout(
   if(typeof logs!=='boolean'&&round.feed.length&&onToggle){
    const label=open?'收起本轮日志':`展开本轮日志 · ${round.feed.length}`;
    const toggle=l.button(label,()=>onToggle(round.round),true,l.inset,l.contentWidth,'#282b42','#d9d9e6',34);
-   toggle.size=12;
+   toggle.size=11;toggle.weight=500;toggle.stroke='#403d56';toggle.radius=10;
   }
   if(open&&round.feed.length){
    l.y+=4;
