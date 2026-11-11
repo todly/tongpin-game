@@ -113,7 +113,7 @@ function settings(l:Layout){const room=game.room!,editable=game.available&&game.
   l.box(l.y,1,l.inset,l.contentWidth,'#39364e','',0);l.y+=16;
   const preventRepeatWords=room.settings.preventRepeatWords===true,y=l.y,switchWidth=64,labelW=l.contentWidth-switchWidth-12;
   l.text('禁止重复词语',13,'#e8e3f2',l.inset,labelW,'left',500,0);
-  l.y=y+23;l.text('用过的词，本局不可再用',10,'#9693ad',l.inset,labelW,'left',400,0);
+  l.y=y+23;l.text('前几轮提交过的词，不可再用',10,'#9693ad',l.inset,labelW,'left',400,0);
   l.y=y;const toggle=l.button(preventRepeatWords?'已开启':'已关闭',()=>run('lobby:settings',{preventRepeatWords:!preventRepeatWords}),editable,l.inset+l.contentWidth-switchWidth,switchWidth,preventRepeatWords?'#d8ff72':'#302d45',preventRepeatWords?'#20251a':'#b2aac5',44);
   toggle.radius=22;toggle.size=11;
   l.y=y+60;l.box(l.y,1,l.inset,l.contentWidth,'#39364e','',0);l.y+=14;
@@ -125,9 +125,16 @@ function draw(){if(!active||!width)return;
  header.y=top;const room=game.room;
  // 顶栏拥有独立安全区、字号层级和 44px 触控范围。
  if(room){Object.assign(secondary(header,history?'返回':'历史',()=>{history=!history;scroll=0;keyboard.close();draw();},true,16,52),{size:13,h:44});header.y=top;const label=width<360?`${room.code} · 复制`:`房间 ${room.code} · 复制`;const n=header.button(label,copyCode,true,76,width-152,'#282b42','#ececf5',44);n.size=13;header.y=top;Object.assign(secondary(header,'邀请',share,true,width-68,52),{size:13,h:44});}
- else {header.text('同频脑电波',13,'#d8d1ec',header.inset,header.contentWidth,'left',600);header.y=top+27;header.text('一个词，遇见相同的灵感',11,muted);}
- if(game.recovering)body.text('连接或身份恢复中，请稍候。',13,'#ffc078'); if(!room){body.hero();body.card(()=>{body.fieldButton(field(body,'你的昵称','nickname'),'随机昵称',()=>{nickname=randomNickname();draw();},game.available);body.button('创建房间',()=>run('room:create',{nickname}),game.available);body.y+=8;body.box(body.y,1,body.inset,body.contentWidth,'#39364e','',0);body.y+=18;field(body,'加入别人的房间','code',game.available,'输入六位房间码');secondary(body,'加入房间',()=>run('room:join',{code,nickname}),game.available&&code.length===6);});body.card(()=>{body.text('怎么玩',15,'#e8e1f4',body.inset,body.contentWidth,'left',600,14);
- for(const [i,tip] of ['写下一个词，寻找同频的伙伴','相同词语的伙伴合组，一起思考','组内全员同意候选词，即可锁定','全员同词获胜，达到回合上限揭晓'].entries()){
+
+ else {
+  const titleWidth=header.measure('同频脑电波',18,600).width,subtitleX=header.inset+titleWidth+14;
+  header.text('同频脑电波',18,'#d3c5ff',header.inset,titleWidth,'left',600,0);
+  Object.assign(header.nodes[header.nodes.length-1]!,{y:top,h:44,baseline:'middle'});
+  header.y=top;header.text('一个词，想到一起。',11,'#aaa3bf',subtitleX,width-header.inset-subtitleX,'left',400,0);
+  Object.assign(header.nodes[header.nodes.length-1]!,{y:top,h:44,baseline:'middle'});
+ }
+ if(game.recovering)body.text('连接或身份恢复中，请稍候。',13,'#ffc078'); if(!room){body.text('灵感交汇 / WORD SYNC',10,'#b9afe9',body.inset,body.contentWidth,'left',500,16);body.card(()=>{body.fieldButton(field(body,'你的昵称','nickname'),'随机昵称',()=>{nickname=randomNickname();draw();},game.available);body.button('创建房间',()=>run('room:create',{nickname}),game.available);body.y+=8;body.box(body.y,1,body.inset,body.contentWidth,'#39364e','',0);body.y+=18;field(body,'加入别人的房间','code',game.available,'输入六位房间码');secondary(body,'加入房间',()=>run('room:join',{code,nickname}),game.available&&code.length===6);});body.card(()=>{body.text('怎么玩',15,'#e8e1f4',body.inset,body.contentWidth,'left',600,14);
+ for(const [i,tip] of ['首轮自由写一个词，看看大家的想法','根据上轮词语联想或寻找共同点，写出新词','同词伙伴合组，候选词全组同意后锁定','全员同词获胜，达到回合上限揭晓'].entries()){
   const y=body.y;body.box(y,20,body.inset,20,'#35304d','',7);body.text(String(i+1),10,'#c9b8f3',body.inset,20,'center',600,0);Object.assign(body.nodes[body.nodes.length-1]!,{y,h:20,baseline:'middle'});
   body.y=y+3;body.text(tip,12,muted,body.inset+30,body.contentWidth-30,'left',400,0);body.y=Math.max(y+20,body.y)+12;
  }body.y-=6;});}

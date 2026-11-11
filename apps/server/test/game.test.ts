@@ -7,7 +7,7 @@ const state=(s:Client,p:(v:any)=>boolean)=>new Promise<any>(resolve=>{const h=(v
 beforeEach(async()=>{process.env.NODE_ENV='test';const app=createApp();game=app.game;await new Promise<void>(r=>app.httpServer.listen(0,r));const a=app.httpServer.address();url=`http://127.0.0.1:${typeof a==='object'&&a?a.port:0}`;closeServer=async()=>{await app.io.close();await new Promise<void>(r=>app.httpServer.close(()=>r()))}});
 afterEach(async()=>{clients.forEach(c=>c.close());clients=[];await closeServer?.()});
 const client=async()=>{const s=connect(url,{transports:['websocket'],forceNew:true});clients.push(s);await new Promise<void>(r=>s.on('connect',()=>r()));return s};
-async function room(names=['Ada','Bo']){const sockets=await Promise.all(names.map(()=>client()));const created=await emitAck(sockets[0]!,'room:create',{colorId:0 as const,returnedToLobby:false,nickname:names[0]});const sessions=[created.data];for(let i=1;i<sockets.length;i++)sessions.push((await emitAck(sockets[i]!,'room:join',{code:created.data.roomCode,colorId:0 as const,returnedToLobby:false,nickname:names[i]})).data);await emitAck(sockets[0]!,'lobby:settings',{timerSeconds:10,maxRounds:3});for(let i=0;i<sockets.length-1;i++)await emitAck(sockets[i]!,'lobby:ready',true);const waiting=state(sockets[0]!,v=>v.phase==='writing');await emitAck(sockets.at(-1)!,'lobby:ready',true);return{sockets,sessions,writing:await waiting}}
+async function room(names=['Ada','Bo'],settings:{preventRepeatWords?:boolean;maxRounds?:number}={}){const sockets=await Promise.all(names.map(()=>client()));const created=await emitAck(sockets[0]!,'room:create',{colorId:0 as const,returnedToLobby:false,nickname:names[0]});const sessions=[created.data];for(let i=1;i<sockets.length;i++)sessions.push((await emitAck(sockets[i]!,'room:join',{code:created.data.roomCode,colorId:0 as const,returnedToLobby:false,nickname:names[i]})).data);await emitAck(sockets[0]!,'lobby:settings',{timerSeconds:10,maxRounds:3,...settings});for(let i=0;i<sockets.length-1;i++)await emitAck(sockets[i]!,'lobby:ready',true);const waiting=state(sockets[0]!,v=>v.phase==='writing');await emitAck(sockets.at(-1)!,'lobby:ready',true);return{sockets,sessions,writing:await waiting}}
 async function revealDifferent(r:Awaited<ReturnType<typeof room>>,words:string[]){const wait=state(r.sockets[0]!,v=>v.phase==='reveal');for(let i=0;i<words.length;i++)await emitAck(r.sockets[i]!,'game:submit',{word:words[i],roundId:r.writing.roundId});return wait}
 describe('游戏服务端',()=>{
  it('Socket.IO 每次按玩家发送状态时刷新 serverNow',async()=>{const a=await client(),b=await client();const firstState=state(a,v=>typeof v.serverNow==='number');const created=await emitAck(a,'room:create',{});const first=await firstState;await new Promise(r=>setTimeout(r,5));const nextState=state(a,v=>v.players.length===2);await emitAck(b,'room:join',{code:created.data.roomCode});const second=await nextState;expect(second.serverNow).toBeGreaterThan(first.serverNow);expect(second.serverNow).toBeLessThanOrEqual(Date.now())});
@@ -119,4 +119,54 @@ describe('房主踢人',()=>{
   expect(result.visibleSubmissions.every((s:any)=>s.word==='星')).toBe(true);
  });
 });
+});
+
+
+describe('全房间禁止重复词语',()=>{
+ async function nextRound(r:Awaited<ReturnType<typeof room>>,round:number){
+  const internal=game.rooms.get(r.sessions[0].roomCode),waiting=state(r.sockets[0]!,v=>v.phase==='writing'&&v.round===round);
+  game.start(internal);return waiting;
+ }
+ it('禁用全房间往轮词语，忽略大小写和首尾空格，本轮仍可同词获胜',async()=>{
+  const r=await room(['甲','乙','丙'],{preventRepeatWords:true});await revealDifferent(r,['Sun','Moon','Sea']);const w=await nextRound(r,2);
+  for(const word of [' mOoN ','Sun']){const reply=await emitAck(r.sockets[0]!,'game:submit',{word,roundId:w.roundId});expect(reply.ok).toBe(false);expect(reply.error).toContain('之前的回合已提交');}
+  const ended=state(r.sockets[0]!,v=>v.phase==='ended');
+  for(const s of r.sockets)expect((await emitAck(s,'game:submit',{word:'新词',roundId:w.roundId})).ok).toBe(true);
+  expect((await ended).endReason).toBe('all-same');
+ });
+ it('小组不能沿用组外玩家的往轮词语；新候选可确认且其他人可在同轮同词',async()=>{
+  const r=await room(['甲','乙','丙'],{preventRepeatWords:true});await revealDifferent(r,['苹果','苹果','香蕉']);const w=await nextRound(r,2);
+  expect((await emitAck(r.sockets[0]!,'group:propose',{roundId:w.roundId,proposalVersion:0,word:'香蕉'})).ok).toBe(false);
+  const proposed=state(r.sockets[0]!,v=>v.proposals.length===1);expect((await emitAck(r.sockets[0]!,'group:propose',{roundId:w.roundId,proposalVersion:0,word:'星空'})).ok).toBe(true);const p=await proposed;
+  expect((await emitAck(r.sockets[1]!,'group:confirm',{roundId:w.roundId,proposalVersion:p.proposalVersion,proposalId:p.proposals[0].id})).ok).toBe(true);
+  const ended=state(r.sockets[0]!,v=>v.phase==='ended');expect((await emitAck(r.sockets[2]!,'game:submit',{roundId:w.roundId,word:'星空'})).ok).toBe(true);expect((await ended).endReason).toBe('all-same');
+ });
+ it('往轮被否决且未提交的候选词允许全房间复用',async()=>{
+  const r=await room(['甲','乙','丙','丁'],{preventRepeatWords:true,maxRounds:5});await revealDifferent(r,['苹果','苹果','香蕉','西瓜']);const w=await nextRound(r,2);
+  const proposed=state(r.sockets[0]!,v=>v.proposals.length===1);await emitAck(r.sockets[0]!,'group:propose',{roundId:w.roundId,proposalVersion:0,word:'月光'});const p=await proposed;
+  expect((await emitAck(r.sockets[1]!,'group:reject',{roundId:w.roundId,proposalVersion:p.proposalVersion,proposalId:p.proposals[0].id})).ok).toBe(true);
+  const revealed=state(r.sockets[0]!,v=>v.phase==='reveal');game.timeout(game.rooms.get(r.sessions[0].roomCode),w.roundId);await revealed;const next=await nextRound(r,3);
+  expect((await emitAck(r.sockets[2]!,'game:submit',{roundId:next.roundId,word:'月光'})).ok).toBe(true);
+  expect((await emitAck(r.sockets[0]!,'group:propose',{roundId:next.roundId,proposalVersion:0,word:'月光'})).ok).toBe(true);
+ });
+ it('候选词超时被采用成为最终提交后，全房间后续回合禁止复用',async()=>{
+  const r=await room(['甲','乙','丙'],{preventRepeatWords:true,maxRounds:5});await revealDifferent(r,['苹果','苹果','香蕉']);const w=await nextRound(r,2);
+  expect((await emitAck(r.sockets[0]!,'group:propose',{roundId:w.roundId,proposalVersion:0,word:'月光'})).ok).toBe(true);
+  const revealed=state(r.sockets[0]!,v=>v.phase==='reveal');game.timeout(game.rooms.get(r.sessions[0].roomCode),w.roundId);
+  expect((await revealed).history[1].submissions.filter((s:any)=>s.word==='月光')).toHaveLength(2);
+  const next=await nextRound(r,3);
+  expect((await emitAck(r.sockets[2]!,'game:submit',{roundId:next.roundId,word:'月光'})).ok).toBe(false);
+  expect((await emitAck(r.sockets[0]!,'group:propose',{roundId:next.roundId,proposalVersion:0,word:'月光'})).ok).toBe(false);
+ });
+ it('开关关闭时允许复用其他玩家的往轮词语',async()=>{
+  const r=await room(['甲','乙']);await revealDifferent(r,['苹果','香蕉']);const w=await nextRound(r,2);
+  expect((await emitAck(r.sockets[0]!,'game:submit',{roundId:w.roundId,word:'香蕉'})).ok).toBe(true);
+ });
+ it('重新开始一局清空全房间词语记录',async()=>{
+  const r=await room(['甲','乙'],{preventRepeatWords:true});const ended=state(r.sockets[0]!,v=>v.phase==='ended');
+  for(const s of r.sockets)await emitAck(s,'game:submit',{roundId:r.writing.roundId,word:'苹果'});const end=await ended;
+  for(const s of r.sockets)await emitAck(s,'game:rematch',{gameId:end.gameId});await emitAck(r.sockets[0]!,'lobby:ready',true);
+  const started=state(r.sockets[0]!,v=>v.phase==='writing');await emitAck(r.sockets[1]!,'lobby:ready',true);const w=await started;
+  expect(w.history).toEqual([]);expect(w.settings.preventRepeatWords).toBe(true);expect((await emitAck(r.sockets[0]!,'game:submit',{roundId:w.roundId,word:'苹果'})).ok).toBe(true);
+ });
 });
