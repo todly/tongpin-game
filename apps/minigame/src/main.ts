@@ -15,6 +15,7 @@ const toast=new Toast();
 const clipboard=new Clipboard(wx,message=>{toast.push(message);draw();});
 let footerTop=0,fullHeight=0;
 const expanded=new Set<number>();
+let newestRoundFirst=false;
 let body:Layout,header:Layout,footer:Layout,viewport={x:0,y:0,w:0,h:0};
 function resize(){const info=wx.getSystemInfoSync();width=info.windowWidth;height=info.windowHeight;fullHeight=keyboard.state==='idle'?height:Math.max(fullHeight,height);const dpr=info.pixelRatio||1;canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);top=Math.max(16,info.safeArea?.top||0);try{const rect=wx.getMenuButtonBoundingClientRect?.();top=Math.max(top,rect&&Number.isFinite(rect.bottom)&&rect.bottom>0?rect.bottom+12:top+48);}catch{top+=48;}bottom=Math.max(16,height-(info.safeArea?.bottom||height));draw();}
 function run(event:string,data:unknown=null){keyboard.close();if(event==='room:create'||event==='room:join')data={...(data as object),nickname:normalizeNickname(nickname),...(event==='room:join'?{code:code.trim().toUpperCase()}: {})};if(event==='lobby:rename')data=normalizeNickname(nickname);if(event==='game:submit'||event==='group:propose')data={...(data as object),word:normalizeWord(game.word)};toast.clear();void game.act(event,data).catch(()=>{draw();});}
@@ -50,7 +51,13 @@ function players(l:Layout){const room=game.room!;const drawn=new Set<string>();
 }
 function timeline(l:Layout,feed:Parameters<typeof orderedTimeline>[0]){for(const item of orderedTimeline(feed)){const start=l.y,index=l.nodes.length,inset=l.inset;l.inset+=10;if(item.kind==='chat'){l.y=start+8;l.text(item.nickname,12,playerColor(item.colorId));l.text(item.text,14,'#f6f2eb',l.inset,l.contentWidth,'left',400,0);const end=l.y+8;l.nodes.splice(index,0,{kind:'box',x:inset,y:start,w:width-inset*2,h:end-start,fill:'#2b2e46',radius:10});l.y=end;}else{const text=formatEvent(item);let textNodes;if(item.kind==='merge'&&item.names){textNodes=l.rich([...item.names.flatMap((name,i)=>[{text:i?'、':'',color:muted},{text:name.nickname,color:playerColor(name.colorId)}]),{text:'达成同频',color:'#c6cedd'}]);}else if(['submission','proposed','agreed','refused'].includes(item.kind)){textNodes=l.rich([{text:item.nickname,color:playerColor(item.colorId)},{text:text.slice(item.nickname.length),color:'#c6cedd'}]);}else{const textIndex=l.nodes.length;l.text(text,12,'#c6cedd',l.inset,l.contentWidth,'left',400,0);textNodes=l.nodes.slice(textIndex);}const top=Math.min(...textNodes.map(n=>n.y)),bottom=Math.max(...textNodes.map(n=>n.y+n.h));l.nodes.splice(index,0,{kind:'box',x:inset,y:top,w:2,h:bottom-top,fill:'#7d869f',radius:0});l.y=bottom;}l.inset=inset;l.y+=6;}}
 function submissions(l:Layout,items:NonNullable<typeof game.room>['visibleSubmissions']){for(const s of items)l.card(()=>{const y=l.y;l.text('本轮词语',9,muted,l.inset,l.contentWidth,'left',600,0);l.y=y+18;l.text(s.nickname,12,playerColor(s.colorId),l.inset,l.contentWidth,'left',500,6);l.text(s.timedOut?'时间到':s.word||'空白',22,'#eee8ff',l.inset,l.contentWidth,'left',600,0);},'#403957','#232239',14,10);}
-function settings(l:Layout){const room=game.room!;l.card(()=>{l.text('房间设置',16);for(const [label,value,min,max,step,key] of [['计时',room.settings.timerSeconds,10,180,5,'timerSeconds'],['回合',room.settings.maxRounds,1,30,1,'maxRounds']] as const){const y=l.y;l.text(label,14,muted,l.inset,48);l.y=y;const x=width-l.inset-152;secondary(l,'−',()=>run('lobby:settings',{[key]:Math.max(min,value-step)}),game.available&&game.isOwner&&value>min,x,44).h=44;l.y=y+14;l.text(`${value}${key==='timerSeconds'?'秒':'轮'}`,14,lime,x+48,56,'center');l.y=y;secondary(l,'＋',()=>run('lobby:settings',{[key]:Math.min(max,value+step)}),game.available&&game.isOwner&&value<max,x+108,44).h=44;l.y=y+52;}l.text(game.isOwner?'全员准备后自动开始':'仅房主可以修改设置',12,muted);});}
+function settings(l:Layout){const room=game.room!;l.card(()=>{l.text('房间设置',16);for(const [label,value,min,max,step,key] of [['计时',room.settings.timerSeconds,10,180,5,'timerSeconds'],['回合',room.settings.maxRounds,1,30,1,'maxRounds']] as const){const y=l.y;l.text(label,14,muted,l.inset,48);l.y=y;const x=width-l.inset-152;secondary(l,'−',()=>run('lobby:settings',{[key]:Math.max(min,value-step)}),game.available&&game.isOwner&&value>min,x,44).h=44;l.y=y+14;l.text(`${value}${key==='timerSeconds'?'秒':'轮'}`,14,lime,x+48,56,'center');l.y=y;secondary(l,'＋',()=>run('lobby:settings',{[key]:Math.min(max,value+step)}),game.available&&game.isOwner&&value<max,x+108,44).h=44;l.y=y+52;}
+ const preventRepeatWords=room.settings.preventRepeatWords===true;
+ secondary(l,`禁止重复词语 · ${preventRepeatWords?'已开启':'已关闭'}`,
+  ()=>run('lobby:settings',{preventRepeatWords:!preventRepeatWords}),game.available&&game.isOwner);
+ if(preventRepeatWords)l.text('每位玩家本局用过的词不可再用。',12,muted);
+ l.text(game.isOwner?'全员准备后自动开始':'仅房主可以修改设置',12,muted);
+ });}
 function draw(){if(!active||!width)return;
  const measure=canvasMeasure(ctx);body=new Layout(width,measure);header=new Layout(width,measure);footer=new Layout(width,measure);
  header.y=top;const room=game.room;
@@ -58,7 +65,17 @@ function draw(){if(!active||!width)return;
  if(room){Object.assign(secondary(header,history?'返回':'历史',()=>{history=!history;scroll=0;keyboard.close();draw();},true,16,52),{size:13,h:44});header.y=top;const label=width<360?`${room.code} · 复制`:`房间 ${room.code} · 复制`;const n=header.button(label,copyCode,true,76,width-152,'#282b42','#ececf5',44);n.size=13;header.y=top;Object.assign(secondary(header,'邀请',share,true,width-68,52),{size:13,h:44});}
  else {header.text('同频脑电波',13,'#d8d1ec',header.inset,header.contentWidth,'left',600);header.y=top+27;header.text('一个词，遇见相同的灵感',11,muted);}
  if(game.recovering)body.text('连接或身份恢复中，请稍候。',13,'#ffc078'); if(!room){body.hero();body.card(()=>{body.fieldButton(field(body,'你的昵称','nickname'),'随机昵称',()=>{nickname=randomNickname();draw();},game.available);body.button('创建房间',()=>run('room:create',{nickname}),game.available);field(body,'加入别人的房间','code',game.available,'输入六位房间码');secondary(body,'加入房间',()=>run('room:join',{code,nickname}),game.available&&code.length===6);});body.card(()=>{body.text('怎么玩',16,lime);body.text('每轮写下一个词，看看谁与你同频。\n相同词语的伙伴持续合组，下一轮一起思考。\n组内提出候选，全员确认即可锁定。\n全员同词即完美同频，或到达回合上限揭晓结果。',14,muted);});}
- else if(history){body.heading('我们的灵感足迹','回合历史',`${room.history.length} 回合`);if(!room.history.length)body.text('暂无回合记录',15,muted);historyLayout(body,room,expanded,round=>{expanded.has(round)?expanded.delete(round):expanded.add(round);draw();});}
+ else if(history){
+  body.heading('我们的灵感足迹','回合历史',`${room.history.length} 回合`);
+  if(!room.history.length)body.text('暂无回合记录',15,muted);
+  if(room.history.length>1)secondary(body,newestRoundFirst?'倒序 · 点击切换正序':'正序 · 点击切换倒序',()=>{
+   newestRoundFirst=!newestRoundFirst;scroll=0;draw();
+  });
+  historyLayout(body,room,expanded,round=>{
+   if(expanded.has(round))expanded.delete(round);else expanded.add(round);
+   draw();
+  },newestRoundFirst);
+ }
  else if(room.view==='lobby'){body.heading('相遇 / GATHER','房间大厅',`${room.players.length}/6 位伙伴`);players(body);body.text('修改昵称',12,muted);{const y=body.y;const n=body.button(nickname||'点此输入',()=>input('nickname'),game.available,20,width-116,'#121421','#f6f2eb',44);n.field='nickname';n.focused=keyboard.kind==='nickname';n.stroke='#4a4d60';body.y=y;const saveButton=secondary(body,'保存',()=>run('lobby:rename',nickname),game.available,width-88,68);saveButton.h=44;body.y=y+60;}settings(body);secondary(body,'离开房间',()=>run('room:leave'),game.available);footer.button(game.me?.ready?'取消准备':'我准备好了',()=>run('lobby:ready',!game.me?.ready),game.available,20,width-40,game.me?.ready?violet:lime,game.me?.ready?'#ffffff':'#17191f');}
  else if(room.view==='writing'){body.heading('灵感 / THINK',`第 ${room.round} 回合`,`${room.submittedPlayerIds.length}/${room.players.length} 已锁定`);{const seconds=deadlineSeconds(game.remaining('writing'),0);if(seconds!==undefined)body.timer(seconds,room.settings.timerSeconds);}
  // 头像区域先于上轮词语展示，玩家锁定状态一目了然。
