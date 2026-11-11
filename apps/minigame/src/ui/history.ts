@@ -58,14 +58,14 @@ export function historyLayout(
     l.inset+=10;
     if(item.kind==='chat'){
      l.y=itemStart+8;
-     l.text(item.nickname,11,playerColor(item.colorId),l.inset,l.contentWidth,'left',600,3);
+     l.text(item.nickname,11,playerColor(item.colorId),l.inset,l.contentWidth,'left',600,7);
      l.text(item.text,13,text,l.inset,l.contentWidth,'left',400,0);
      const itemEnd=l.y+8;l.nodes.splice(itemIndex,0,{kind:'box',x:itemInset,y:itemStart,w:l.width-itemInset*2,h:itemEnd-itemStart,fill:'#2b2e46',stroke:'#3c405d',radius:9});l.y=itemEnd;
     }else{
      const textNodes=l.rich(eventParts(item),11),top=Math.min(...textNodes.map(node=>node.y)),bottom=Math.max(...textNodes.map(node=>node.y+node.h));
      l.nodes.splice(itemIndex,0,{kind:'box',x:itemInset,y:top,w:2,h:bottom-top,fill:'#7d869f',radius:0});
     }
-    l.inset=itemInset;l.y+=5;
+    l.inset=itemInset;l.y+=8;
    }
   }
   if(open&&round.feed.length){
