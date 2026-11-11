@@ -39,7 +39,7 @@ async function generate(){if(!game.room||exporting)return;const identity=game.se
 function preview(){if(!files.length)return;wx.previewImage({current:files[0],urls:files,fail:()=>{toast.push('图片查看失败，请重新生成后重试。');draw();}});}
 const muted='#b8bbce',lime='#d8ff72',violet='#8376ff';
 function secondary(l:Layout,label:string,action:()=>void,enabled=true,x=l.inset,w=l.contentWidth){return l.button(label,action,enabled,x,w,'#282b42','#ececf5');}
-function field(l:Layout,label:string,kind:'nickname'|'code'|'word'|'chat',enabled=game.available,placeholder='点此输入'){const value={nickname,code,word:game.word,chat}[kind];if(label)l.text(label,12,muted);const n=l.button(value||placeholder,()=>input(kind),enabled,l.inset,l.contentWidth,'#121421',value?'#f6f2eb':muted,48);n.field=kind;n.focused=keyboard.kind===kind;return n;}
+function field(l:Layout,label:string,kind:'nickname'|'code'|'word'|'chat',enabled=game.available,placeholder='点此输入'){const value={nickname,code,word:game.word,chat}[kind];if(label)l.text(label,12,muted);const n=l.button(value||placeholder,()=>input(kind),enabled,l.inset,l.contentWidth,'#121421',value?'#f6f2eb':muted,48);n.field=kind;n.focused=keyboard.kind===kind;if(!value){n.size=12;n.weight=400;n.metrics=l.measure(n.text||'',12,400);}return n;}
 function clippedText(l:Layout,text:string,size:number,width:number,weight=400){
  const chars=Array.from(text.replace(/\s+/g,' '));if(l.measure(chars.join(''),size,weight).width<=width)return chars.join('');
  while(chars.length&&l.measure(chars.join('')+'…',size,weight).width>width)chars.pop();return chars.join('')+'…';
@@ -67,13 +67,40 @@ function players(l:Layout){const room=game.room!;const drawn=new Set<string>();
 }
 function timeline(l:Layout,feed:Parameters<typeof orderedTimeline>[0]){for(const item of orderedTimeline(feed)){const start=l.y,index=l.nodes.length,inset=l.inset;l.inset+=10;if(item.kind==='chat'){l.y=start+8;l.text(item.nickname,12,playerColor(item.colorId));l.text(item.text,14,'#f6f2eb',l.inset,l.contentWidth,'left',400,0);const end=l.y+8;l.nodes.splice(index,0,{kind:'box',x:inset,y:start,w:width-inset*2,h:end-start,fill:'#2b2e46',radius:10});l.y=end;}else{const text=formatEvent(item);let textNodes;if(item.kind==='merge'&&item.names){textNodes=l.rich([...item.names.flatMap((name,i)=>[{text:i?'、':'',color:muted},{text:name.nickname,color:playerColor(name.colorId)}]),{text:'达成同频',color:'#c6cedd'}]);}else if(['submission','proposed','agreed','refused'].includes(item.kind)){textNodes=l.rich([{text:item.nickname,color:playerColor(item.colorId)},{text:text.slice(item.nickname.length),color:'#c6cedd'}]);}else{const textIndex=l.nodes.length;l.text(text,12,'#c6cedd',l.inset,l.contentWidth,'left',400,0);textNodes=l.nodes.slice(textIndex);}const top=Math.min(...textNodes.map(n=>n.y)),bottom=Math.max(...textNodes.map(n=>n.y+n.h));l.nodes.splice(index,0,{kind:'box',x:inset,y:top,w:2,h:bottom-top,fill:'#7d869f',radius:0});l.y=bottom;}l.inset=inset;l.y+=6;}}
 function submissions(l:Layout,items:NonNullable<typeof game.room>['visibleSubmissions']){for(const s of items)l.card(()=>{const y=l.y;l.text('本轮词语',9,muted,l.inset,l.contentWidth,'left',600,0);l.y=y+18;l.text(s.nickname,12,playerColor(s.colorId),l.inset,l.contentWidth,'left',500,6);l.text(s.timedOut?'时间到':s.word||'空白',22,'#eee8ff',l.inset,l.contentWidth,'left',600,0);},'#403957','#232239',14,10);}
-function settings(l:Layout){const room=game.room!;l.card(()=>{l.text('房间设置',16);for(const [label,value,min,max,step,key] of [['计时',room.settings.timerSeconds,10,180,5,'timerSeconds'],['回合',room.settings.maxRounds,1,30,1,'maxRounds']] as const){const y=l.y;l.text(label,14,muted,l.inset,48);l.y=y;const x=width-l.inset-152;secondary(l,'−',()=>run('lobby:settings',{[key]:Math.max(min,value-step)}),game.available&&game.isOwner&&value>min,x,44).h=44;l.y=y+14;l.text(`${value}${key==='timerSeconds'?'秒':'轮'}`,14,lime,x+48,56,'center');l.y=y;secondary(l,'＋',()=>run('lobby:settings',{[key]:Math.min(max,value+step)}),game.available&&game.isOwner&&value<max,x+108,44).h=44;l.y=y+52;}
- const preventRepeatWords=room.settings.preventRepeatWords===true;
- secondary(l,`禁止重复词语 · ${preventRepeatWords?'已开启':'已关闭'}`,
-  ()=>run('lobby:settings',{preventRepeatWords:!preventRepeatWords}),game.available&&game.isOwner);
- if(preventRepeatWords)l.text('每位玩家本局用过的词不可再用。',12,muted);
- l.text(game.isOwner?'全员准备后自动开始':'仅房主可以修改设置',12,muted);
- });}
+function settings(l:Layout){const room=game.room!,editable=game.available&&game.isOwner;
+ l.card(()=>{
+  const headerY=l.y,badgeWidth=68,badgeX=l.inset+l.contentWidth-badgeWidth;
+  l.text('房间设置',16,'#f6f2ff',l.inset,l.contentWidth-badgeWidth-12,'left',600,0);
+  l.box(headerY,24,badgeX,badgeWidth,'#302c48','',12);
+  l.y=headerY;l.text(game.isOwner?'房主可修改':'仅房主可修改',10,'#c9b8f3',badgeX,badgeWidth,'center',500,0);
+  Object.assign(l.nodes[l.nodes.length-1]!,{y:headerY,h:24,baseline:'middle'});
+  l.y=headerY+40;
+  for(const [label,detail,value,min,max,step,key] of [
+   ['每轮计时','10–180 秒',room.settings.timerSeconds,10,180,5,'timerSeconds'],
+   ['最多回合','1–30 回合',room.settings.maxRounds,1,30,1,'maxRounds'],
+  ] as const){
+   const y=l.y,controlW=144,controlX=l.inset+l.contentWidth-controlW,labelW=l.contentWidth-controlW-12;
+   l.y=y+3;l.text(label,13,'#e8e3f2',l.inset,labelW,'left',500,0);
+   l.y=y+25;l.text(detail,10,'#9693ad',l.inset,labelW,'left',400,0);
+   l.box(y,44,controlX,controlW,'#191b2d','#3c3a52',12);
+   const minus=l.button('−',()=>run('lobby:settings',{[key]:Math.max(min,value-step)}),editable&&value>min,controlX,44,'#282a40','#ddd5ef',44);
+   minus.y=y;minus.radius=12;minus.size=20;
+   l.y=y;l.text(`${value}${key==='timerSeconds'?' 秒':' 轮'}`,13,'#eee6ff',controlX+44,56,'center',600,0);
+   Object.assign(l.nodes[l.nodes.length-1]!,{y,h:44,baseline:'middle'});
+   l.y=y;const plus=l.button('＋',()=>run('lobby:settings',{[key]:Math.min(max,value+step)}),editable&&value<max,controlX+100,44,'#282a40','#ddd5ef',44);
+   plus.radius=12;plus.size=18;
+   l.y=y+60;
+  }
+  l.box(l.y,1,l.inset,l.contentWidth,'#39364e','',0);l.y+=16;
+  const preventRepeatWords=room.settings.preventRepeatWords===true,y=l.y,switchWidth=64,labelW=l.contentWidth-switchWidth-12;
+  l.text('禁止重复词语',13,'#e8e3f2',l.inset,labelW,'left',500,0);
+  l.y=y+23;l.text('用过的词，本局不可再用',10,'#9693ad',l.inset,labelW,'left',400,0);
+  l.y=y;const toggle=l.button(preventRepeatWords?'已开启':'已关闭',()=>run('lobby:settings',{preventRepeatWords:!preventRepeatWords}),editable,l.inset+l.contentWidth-switchWidth,switchWidth,preventRepeatWords?'#d8ff72':'#302d45',preventRepeatWords?'#20251a':'#b2aac5',44);
+  toggle.radius=22;toggle.size=11;
+  l.y=y+60;l.box(l.y,1,l.inset,l.contentWidth,'#39364e','',0);l.y+=14;
+  l.text(game.isOwner?'全员准备后，自动开始游戏':'房主调整设置后，全员准备即可开始',10,'#9693ad',l.inset,l.contentWidth,'left',400,0);
+ },'#3e3856','#232238',16,16);
+}
 function draw(){if(!active||!width)return;
  const measure=canvasMeasure(ctx);body=new Layout(width,measure);header=new Layout(width,measure);footer=new Layout(width,measure);
  header.y=top;const room=game.room;
@@ -92,13 +119,13 @@ function draw(){if(!active||!width)return;
    draw();
   },newestRoundFirst);
  }
- else if(room.view==='lobby'){body.heading('相遇 / GATHER','房间大厅',`${room.players.length}/6 位伙伴`);players(body);body.text('修改昵称',12,muted);{const y=body.y;const n=body.button(nickname||'点此输入',()=>input('nickname'),game.available,20,width-116,'#121421','#f6f2eb',44);n.field='nickname';n.focused=keyboard.kind==='nickname';n.stroke='#4a4d60';body.y=y;const saveButton=secondary(body,'保存',()=>run('lobby:rename',nickname),game.available,width-88,68);saveButton.h=44;body.y=y+60;}settings(body);secondary(body,'离开房间',()=>run('room:leave'),game.available);footer.button(game.me?.ready?'取消准备':'我准备好了',()=>run('lobby:ready',!game.me?.ready),game.available,20,width-40,game.me?.ready?violet:lime,game.me?.ready?'#ffffff':'#17191f');}
+ else if(room.view==='lobby'){body.heading('相遇 / GATHER','房间大厅',`${room.players.length}/6 位伙伴`);players(body);body.text('修改昵称',12,muted);{const y=body.y;const n=body.button(nickname||'点此输入',()=>input('nickname'),game.available,20,width-116,'#121421','#f6f2eb',44);n.field='nickname';n.focused=keyboard.kind==='nickname';if(!nickname){n.size=12;n.weight=400;n.color=muted;n.metrics=body.measure(n.text||'',12,400);}n.stroke='#4a4d60';body.y=y;const saveButton=secondary(body,'保存',()=>run('lobby:rename',nickname),game.available,width-88,68);saveButton.h=44;body.y=y+60;}settings(body);secondary(body,'离开房间',()=>run('room:leave'),game.available);footer.button(game.me?.ready?'取消准备':'我准备好了',()=>run('lobby:ready',!game.me?.ready),game.available,20,width-40,game.me?.ready?violet:lime,game.me?.ready?'#ffffff':'#17191f');}
  else if(room.view==='writing'){body.heading('灵感 / THINK',`第 ${room.round} 回合`,`${room.submittedPlayerIds.length}/${room.players.length} 已锁定`);{const seconds=deadlineSeconds(game.remaining('writing'),0);if(seconds!==undefined)body.timer(seconds,room.settings.timerSeconds);}
  // 上轮词语直接整合到玩家行，独立列位于昵称与锁定状态之间。
  players(body);
  if(!room.history.length)body.card(()=>{const promptY=body.y;body.text('写一个词，让脑电波相遇。',13,muted);const prompt=body.nodes[body.nodes.length-1]!;Object.assign(prompt,{y:promptY,h:Math.max(prompt.h,26),baseline:'middle'});body.y=promptY+prompt.h;});
  if(game.candidate){const proposal=game.candidate;body.card(()=>{body.text('同组候选',12,violet);body.text(proposal.word,18,lime);body.text(`同意 ${proposal.confirmations.length}/${proposal.memberIds.length}`,13,muted);const y=body.y,w=(body.contentWidth-10)/2;body.button('同意',()=>run('group:confirm',{...game.round(),proposalId:proposal.id}),game.available&&!proposal.confirmations.includes(game.me?.id||''),body.inset,w);body.y=y;body.button('否决',()=>run('group:reject',{...game.round(),proposalId:proposal.id}),game.available,body.inset+10+w,w,'#f3a8b6','#30151d');});}
- body.card(()=>{body.text(game.myGroup?'同组交流':'仅自己可见的思考',16,lime);body.text(game.myGroup?'消息仅同组玩家可见':'可以记录下你的思考过程，不会发送给其他玩家',13,muted);timeline(body,room.currentFeed);body.rowFields({text:chat||'点此输入聊天内容',field:'chat',focused:keyboard.kind==='chat',action:()=>input('chat'),enabled:game.available},{text:'发送',action:()=>{const value=chat;void game.act('group:chat',{roundId:room.roundId,text:value}).then(()=>{chat='';keyboard.clear('chat');draw();}).catch(()=>{});},enabled:game.available&&!!chat.trim(),fill:'#8376ff'},width<=340?70:82);});footer.rowFields({text:game.word||(game.myGroup?'点此提议本轮词语，全组通过后锁定':'点此输入本轮词语'),field:'word',focused:keyboard.kind==='word',action:()=>input('word'),enabled:game.available&&!game.submitted&&!game.candidate},{text:game.submitted?'已锁定':game.myGroup?'提议候选':'锁定',action:()=>run(game.myGroup?'group:propose':'game:submit',{...game.round(),word:game.word}),enabled:game.available&&!game.submitted&&!game.candidate&&!!game.word.trim(),fill:game.submitted?'#8376ff':'#d8ff72'},width<=340?82:96);}
+ body.card(()=>{body.text(game.myGroup?'同组交流':'仅自己可见的思考',16,lime);body.text(game.myGroup?'消息仅同组玩家可见':'可以记录下你的思考过程，不会发送给其他玩家',13,muted);timeline(body,room.currentFeed);body.rowFields({text:chat,placeholder:'点此输入聊天内容',field:'chat',focused:keyboard.kind==='chat',action:()=>input('chat'),enabled:game.available},{text:'发送',action:()=>{const value=chat;void game.act('group:chat',{roundId:room.roundId,text:value}).then(()=>{chat='';keyboard.clear('chat');draw();}).catch(()=>{});},enabled:game.available&&!!chat.trim(),fill:'#8376ff'},width<=340?70:82);});footer.rowFields({text:game.word,placeholder:game.myGroup?'点此提议本轮词语，全组通过后锁定':'点此输入本轮词语',field:'word',focused:keyboard.kind==='word',action:()=>input('word'),enabled:game.available&&!game.submitted&&!game.candidate},{text:game.submitted?'已锁定':game.myGroup?'提议候选':'锁定',action:()=>run(game.myGroup?'group:propose':'game:submit',{...game.round(),word:game.word}),enabled:game.available&&!game.submitted&&!game.candidate&&!!game.word.trim(),fill:game.submitted?'#8376ff':'#d8ff72'},width<=340?82:96);}
  else {body.heading(room.view==='reveal'?'交汇 / REVEAL':'纪念 / TOGETHER',room.view==='reveal'?'本轮揭晓':room.endReason==='all-same'?'完美同频':'游戏结束',`第 ${room.round} 回合`);if(room.winnerWord)body.card(()=>{body.text('共同的词 / WORD',10,'#b9afe9',body.inset,body.contentWidth,'center',500,6);body.text(room.winnerWord!,22,'#f6f2ff',body.inset,body.contentWidth,'center',700,0);},'#51446c','#2c2643',14,10);players(body);submissions(body,room.visibleSubmissions);if(room.view==='reveal'){const seconds=deadlineSeconds(game.remaining('reveal'),0);if(seconds!==undefined)body.text(`${seconds} 秒后自动推进`,18,lime);}else{body.card(()=>{body.text('留下同频纪念',14);secondary(body,`${logs?'☑':'□'} 包含聊天和思考内容`,()=>{logs=!logs;draw();},!exporting);body.button(exporting?'生成中':'生成本局游戏记录图',()=>{void generate();},!exporting);if(files.length){secondary(body,'查看记录图片',preview);body.text('打开图片后，可长按自行保存。',12,muted);}});secondary(body,'离开房间',()=>run('room:leave'),game.available);footer.button('再玩一次（返回房间）',()=>run('game:rematch',{gameId:room.gameId}),game.available);}}
  const contentTop=top+60;
  footerTop=dockTop(height,bottom,keyboard.occludedHeight,footer.y,fullHeight);
