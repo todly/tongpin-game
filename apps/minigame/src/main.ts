@@ -21,7 +21,8 @@ function resize(){const info=wx.getSystemInfoSync();width=info.windowWidth;heigh
 function run(event:string,data:unknown=null){keyboard.close();if(event==='room:create'||event==='room:join')data={...(data as object),nickname:normalizeNickname(nickname),...(event==='room:join'?{code:code.trim().toUpperCase()}: {})};if(event==='lobby:rename')data=normalizeNickname(nickname);if(event==='game:submit'||event==='group:propose')data={...(data as object),word:normalizeWord(game.word)};toast.clear();void game.act(event,data).catch(()=>{draw();});}
 function stamp(){return `${game.room?.view}|${game.room?.roundId}|${game.candidate?.id}|${game.submitted}|${game.session?.playerId}`;}
 // 输入即校验：命中敏感词立即清空输入框，避免违规内容停留在输入框里。
-const guards:Record<string,ReturnType<typeof createContentGuard>>={};
+type ContentGuard = ReturnType<typeof createContentGuard>;
+const guards: Record<string, ContentGuard> = {};
 function guard(kind:'nickname'|'word'|'chat'){
   return guards[kind]??=createContentGuard({
     check:text=>game.check(text,kind==='nickname'?1:5),
