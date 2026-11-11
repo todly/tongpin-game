@@ -127,11 +127,13 @@ function draw(){if(!active||!width)return;
  if(room){Object.assign(secondary(header,history?'返回':'历史',()=>{history=!history;scroll=0;keyboard.close();draw();},true,16,52),{size:13,h:44});header.y=top;const label=width<360?`${room.code} · 复制`:`房间 ${room.code} · 复制`;const n=header.button(label,copyCode,true,76,width-152,'#282b42','#ececf5',44);n.size=13;header.y=top;Object.assign(secondary(header,'邀请',share,true,width-68,52),{size:13,h:44});}
 
  else {
-  const titleWidth=header.measure('同频脑电波',18,600).width,subtitleX=header.inset+titleWidth+14;
-  header.text('同频脑电波',18,'#d3c5ff',header.inset,titleWidth,'left',600,0);
-  Object.assign(header.nodes[header.nodes.length-1]!,{y:top,h:44,baseline:'middle'});
-  header.y=top;header.text('一个词，想到一起。',11,'#aaa3bf',subtitleX,width-header.inset-subtitleX,'left',400,0);
-  Object.assign(header.nodes[header.nodes.length-1]!,{y:top,h:44,baseline:'middle'});
+  const titleSize=24,titleMetrics=header.measure('同频脑电波',titleSize,600),titleWidth=titleMetrics.width,subtitleX=header.inset+titleWidth+14,textBottom=top+32;
+  // 按实际字形底部对齐，避免不同字号使用同一中线时副标题悬空。
+  header.y=textBottom-titleMetrics.baseline-titleMetrics.descent;
+  header.text('同频脑电波',titleSize,'#d3c5ff',header.inset,titleWidth,'left',600,0);
+  const subtitle='一个词，想到一起。',subtitleMetrics=header.measure(subtitle,11,400);
+  header.y=textBottom-subtitleMetrics.baseline-subtitleMetrics.descent;
+  header.text(subtitle,11,'#aaa3bf',subtitleX,width-header.inset-subtitleX,'left',400,0);
  }
  if(game.recovering)body.text('连接或身份恢复中，请稍候。',13,'#ffc078'); if(!room){body.text('灵感交汇 / WORD SYNC',10,'#b9afe9',body.inset,body.contentWidth,'left',500,16);body.card(()=>{body.fieldButton(field(body,'你的昵称','nickname'),'随机昵称',()=>{nickname=randomNickname();draw();},game.available);body.button('创建房间',()=>run('room:create',{nickname}),game.available);body.y+=8;body.box(body.y,1,body.inset,body.contentWidth,'#39364e','',0);body.y+=18;field(body,'加入别人的房间','code',game.available,'输入六位房间码');secondary(body,'加入房间',()=>run('room:join',{code,nickname}),game.available&&code.length===6);});body.card(()=>{body.text('怎么玩',15,'#e8e1f4',body.inset,body.contentWidth,'left',600,14);
  for(const [i,tip] of ['首轮自由写一个词，看看大家的想法','根据上轮词语联想或寻找共同点，写出新词','同词伙伴合组，候选词全组同意后锁定','全员同词获胜，达到回合上限揭晓'].entries()){
