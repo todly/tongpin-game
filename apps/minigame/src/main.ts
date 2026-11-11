@@ -43,6 +43,8 @@ function field(l:Layout,label:string,kind:'nickname'|'code'|'word'|'chat',enable
 function players(l:Layout){const room=game.room!;const drawn=new Set<string>();
  // 所有玩家坐标相对当前卡片，组框四边保留完整 16px。
  const player=(p:typeof room.players[number])=>{const canKick=room.view==='lobby'&&game.isOwner&&p.id!==room.ownerId,y=l.y,x=l.inset,statusWidth=room.view==='lobby'||room.view==='writing'?58:0,kickWidth=canKick?72:0,nameX=x+50,nameWidth=l.contentWidth-50-(statusWidth?statusWidth+8:0)-kickWidth;l.box(y,38,x,38,playerColor(p.colorId),'',13);l.text(Array.from(p.nickname)[0]||'',18,'#171923',x,38,'center',700,0);Object.assign(l.nodes[l.nodes.length-1],{y,h:38,baseline:'middle'});
+ // 当前用户使用独立头像角标，避免长昵称省略时把身份标识一起截掉。
+ if(p.id===game.me?.id){l.box(y+25,16,x+22,20,lime,'#202238',5);l.y=y+25;l.text('我',10,'#171923',x+22,20,'center',600,0);Object.assign(l.nodes[l.nodes.length-1]!,{y:y+25,h:16,baseline:'middle'});}
  let name=p.nickname;while(name.length&&l.measure(name,14).width>nameWidth)name=name.slice(0,-1);if(name!==p.nickname)name=name.slice(0,-1)+'…';l.y=y;l.text(name,14,playerColor(p.colorId),nameX,nameWidth);l.y=y+23;l.text(`${p.id===room.ownerId?'房主 · ':''}${p.connected?'在线':'离线'}`,11,muted,nameX,nameWidth);
  // 房主在大厅可移出其他玩家：按钮固定在行右侧，昵称与状态文本自动避让。
  if(canKick){const kick=l.button('移出',()=>{wx.showModal({title:'移出玩家',content:`确定将「${p.nickname}」移出房间吗？`,success:(res:{confirm:boolean})=>{if(res.confirm)run('room:kick',{playerId:p.id});}});},game.available,x+l.contentWidth-64,64,'#f3a8b6','#30151d',34);kick.y=y+2;kick.size=12;}
