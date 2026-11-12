@@ -34,10 +34,10 @@ describe('请求生命周期', () => {
 });
 
 describe('权限与恢复保护', () => {
-  it('游戏中不发送离开，组员不发送个人提交，非房主不发送设置', async () => {
+  it('组员不发送个人提交，非房主不发送设置', async () => {
     const game = useGameStore(); game.session = { roomCode: 'ABC123', playerId: 'p', reconnectToken: 'secret' };
     game.room = { view:'lobby',gameId:'test-game',phase: 'writing', ownerId: 'other', currentGroups: [{ members: ['p', 'q'] }] } as any;
-    await expect(game.leave()).rejects.toThrow('不能离开'); await expect(game.submit('词')).rejects.toThrow('小组成员'); await expect(game.settings({ timerSeconds: 10 })).rejects.toThrow('房主'); expect(mock.socket.emit).not.toHaveBeenCalled();
+    await expect(game.submit('词')).rejects.toThrow('小组成员'); await expect(game.settings({ timerSeconds: 10 })).rejects.toThrow('房主'); expect(mock.socket.emit).not.toHaveBeenCalled();
   });
   it('恢复等待禁止进入，网络超时保留令牌，仅明确失效才删除', async () => {
     const game = useGameStore(); game.session = { roomCode: 'ABC123', playerId: 'p', reconnectToken: 'secret' };
@@ -45,4 +45,9 @@ describe('权限与恢复保护', () => {
     await vi.advanceTimersByTimeAsync(8000); await restore; expect(game.session?.reconnectToken).toBe('secret');
     const retry = mock.handlers.connect!(); mock.socket.emit.mock.calls.at(-1)![2]({ ok: false, error: '会话已过期。' }); await retry; expect(game.session).toBeUndefined();
   });
+});
+
+it('游戏中允许退出，确认成功后清理会话',async()=>{
+ const game=useGameStore();game.session={roomCode:'ABC123',playerId:'p',reconnectToken:'secret'};game.room={phase:'writing'} as any;
+ const leaving=game.leave();expect(mock.socket.emit.mock.calls[0]![0]).toBe('room:leave');mock.socket.emit.mock.calls[0]![1]({ok:true,data:null});await leaving;expect(game.session).toBeUndefined();expect(game.room).toBeUndefined();
 });

@@ -76,7 +76,7 @@ export const useGameStore = defineStore('game', () => {
   function clear() { session.value = undefined; room.value = undefined; persist(); }
   function blocked(message: string): Promise<never> { error.value = message; return Promise.reject(new Error(message)); }
   const isOwner = computed(() => !!session.value && room.value?.ownerId === session.value.playerId);
-  const canLeave = computed(() => room.value?.phase === 'lobby' || room.value?.phase === 'ended');
+  const canLeave = computed(() => !!room.value);
   async function leave() { if (!canLeave.value) return blocked('游戏进行中不能离开房间。'); await emit('room:leave'); clear(); }
   /** 房主移出其他玩家；服务端负责权限校验。 */
   function kick(playerId: string) { return isOwner.value && playerId !== session.value?.playerId ? emit('room:kick', { playerId }) : blocked('只有房主可以移出其他玩家。'); }

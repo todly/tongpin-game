@@ -11,7 +11,7 @@ export const useGameStore = defineStore('game', () => {
   const me = computed(() => room.value?.players.find(p => p.id === session.value?.playerId));
   const myGroup = computed(() => room.value?.currentGroups.find(g => g.members.includes(session.value?.playerId || '')));
   const isOwner = computed(() => room.value?.ownerId === me.value?.id);
-  const canLeave = computed(() => room.value?.phase === 'lobby' || room.value?.phase === 'ended');
+  const canLeave = computed(() => !!room.value);
   transport.onState = state => { room.value = state; if (session.value && state.players.some((p: any) => p.id === session.value!.playerId)) restored.value = true; };
   // 被房主移出房间：清除本地会话并提示，避免自动重连回房。
   transport.onKicked = ({ reason }) => { session.value = undefined; room.value = undefined; uni.removeStorageSync('word-sync-session'); error.value = reason; };

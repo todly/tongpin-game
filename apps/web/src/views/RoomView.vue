@@ -46,7 +46,7 @@ const progressGroups = computed(() => {
 async function act(action: () => Promise<unknown>) { try { await action(); } catch {} }
 // 房主移出玩家前二次确认，避免误触。
 function kick(playerId: string, nickname: string) { if (window.confirm(`确定将「${nickname}」移出房间吗？`)) act(() => game.kick(playerId)); }
-async function leave() { await act(async () => { await game.leave(); await router.push('/'); }); }
+async function leave() { if (!window.confirm('确定退出游戏吗？退出后无法返回本局，已产生的回合历史会保留。')) return; await act(async () => { await game.leave(); await router.push('/'); }); }
 async function copyCode() { try { if (game.room) await window.navigator.clipboard.writeText(game.room.code); } catch { game.error = '无法自动复制，请手动复制房间码。'; } }
 // 聊天发送前不再本地预检，由服务端统一校验。
 async function sendChat() { if (!chat.value.trim()) return; try { await game.chat(chat.value); chat.value = ''; } catch {} }
@@ -57,13 +57,13 @@ function rename() { act(() => game.rename(nickname.value)); }
 </script>
 <template>
   <section v-if="game.room" class="room">
-    <header><button v-if="game.canLeave" :disabled="!game.available" class="icon" aria-label="离开房间" @click="leave">←</button><div><small>房间</small><button class="room-code" @click="copyCode">{{ game.room.code }} ⧉</button></div><button class="icon" aria-label="历史记录" @click="showHistory = !showHistory">☷</button></header>
+    <header><button v-if="game.canLeave" :disabled="!game.available" class="icon" aria-label="退出游戏" title="退出游戏" @click="leave">←</button><div><small>房间</small><button class="room-code" @click="copyCode">{{ game.room.code }} ⧉</button></div><button class="icon" aria-label="历史记录" @click="showHistory = !showHistory">☷</button></header>
 
     <template v-if="showHistory">
       <div class="section-title"><div><p class="eyebrow">每个念头，都被珍藏</p><h2>回合记录</h2></div><button class="text-button" @click="showHistory=false">关闭</button></div>
       <div v-if="!game.room.history.length" class="empty card">回合记录会显示在这里。</div>
       <article v-for="round in [...game.room.history].reverse()" :key="round.round" class="card history-card">
-        <strong>第 {{ round.round }} 回合</strong><small>{{ round.revealReason === 'timeout' ? '计时结束' : '全员提交' }} · {{ Math.max(0, Math.round((round.endedAt-round.startedAt)/1000)) }} 秒</small><div v-for="entry in round.submissions" :key="entry.playerId" class="history-row"><span><PlayerName :name="entry.nickname" :color-id="entry.colorId" /></span><b>{{ entry.timedOut ? '—' : entry.word || '（空白）' }}</b></div>
+        <strong>第 {{ round.round }} 回合</strong><small>{{ round.revealReason === 'player-left' ? '玩家退出' : round.revealReason === 'timeout' ? '计时结束' : '全员提交' }} · {{ Math.max(0, Math.round((round.endedAt-round.startedAt)/1000)) }} 秒</small><div v-for="entry in round.submissions" :key="entry.playerId" class="history-row"><span><PlayerName :name="entry.nickname" :color-id="entry.colorId" /></span><b>{{ entry.timedOut ? '—' : entry.word || '（空白）' }}</b></div>
         <details class="round-records"><summary><span>查看本轮记录</span><span class="record-count">{{ round.feed.length }} 条</span><span class="record-arrow" aria-hidden="true">›</span></summary><Timeline :items="round.feed" /></details>
       </article>
     </template>
@@ -96,7 +96,7 @@ function rename() { act(() => game.rename(nickname.value)); }
     </template>
 
     <template v-else>
-      <div class="finish"><div class="burst">✦</div><p class="eyebrow">{{ game.room.endReason === 'all-same' ? '完美同频' : '游戏结束' }}</p><h2>{{ game.room.endReason === 'all-same' ? '你们找到了。' : '真是一段奇妙旅程。' }}</h2><div v-if="game.room.winnerWord" class="winning-word">{{ game.room.winnerWord }}</div><p>{{ game.room.endReason === 'all-same' ? `${game.room.players.length} 个人已合并为同一个非空持久小组。` : `${game.room.settings.maxRounds} 个回合，收获了许多精彩而不同的想法。` }}</p><label><input v-model="includeLogs" type="checkbox" :disabled="exporting">包含本人可见回合记录</label><button class="primary" :disabled="exporting" @click="share">{{ exporting ? '正在生成…' : '一键分享' }}</button><p role="status">{{ shareMessage }}</p><button :disabled="!game.available" class="primary" @click="act(game.rematch)">再玩一次</button><button class="secondary" @click="leave">返回首页</button></div>
+      <div class="finish"><div class="burst">✦</div><p class="eyebrow">{{ game.room.endReason === 'all-same' ? '完美同频' : '游戏结束' }}</p><h2>{{ game.room.endReason === 'all-same' ? '你们找到了。' : '真是一段奇妙旅程。' }}</h2><div v-if="game.room.winnerWord" class="winning-word">{{ game.room.winnerWord }}</div><p>{{ game.room.endReason === 'all-same' ? `${game.room.players.length} 个人已合并为同一个非空持久小组。` : game.room.endReason === 'insufficient-players' ? '只剩一位玩家，游戏已自动结束。' : `${game.room.settings.maxRounds} 个回合，收获了许多精彩而不同的想法。` }}</p><label><input v-model="includeLogs" type="checkbox" :disabled="exporting">包含本人可见回合记录</label><button class="primary" :disabled="exporting" @click="share">{{ exporting ? '正在生成…' : '一键分享' }}</button><p role="status">{{ shareMessage }}</p><button :disabled="!game.available" class="primary" @click="act(game.rematch)">再玩一次</button><button class="secondary" @click="leave">返回首页</button></div>
     </template>
     <div v-if="snapshot" class="report-host" aria-hidden="true"><div ref="report"><ShareReport :room="snapshot" :logs="includeLogs" /></div></div>
     <p v-if="!game.connected" class="error">连接已断开，正在重连；请暂勿操作。</p><p v-if="game.error" role="alert" class="error">{{ game.error }}</p>

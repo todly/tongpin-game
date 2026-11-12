@@ -46,7 +46,7 @@ describe('游戏服务端',()=>{
   expect(internal.groups[0].members).toHaveLength(2);
  });
  it('组词经确认与单人同词后整体合并',async()=>{const r=await room(['甲','乙','丙']);await revealDifferent(r,['x','x','y']);const internal=game.rooms.get(r.sessions[0].roomCode);const next=state(r.sockets[0]!,v=>v.phase==='writing'&&v.round===2);game.start(internal);const w=await next;const proposed=state(r.sockets[0]!,v=>v.proposals.length===1);await emitAck(r.sockets[0]!,'group:propose',{roundId:w.roundId,proposalVersion:0,word:'z'});const p=await proposed;await emitAck(r.sockets[1]!,'group:confirm',{roundId:w.roundId,proposalVersion:p.proposalVersion,proposalId:p.proposals[0].id});const end=state(r.sockets[0]!,v=>v.phase==='ended');await emitAck(r.sockets[2]!,'game:submit',{roundId:w.roundId,word:'z'});expect((await end).currentGroups[0].members).toHaveLength(3)});
- it('作答及揭晓拒绝离开且候选与历史完全不变，断线恢复候选',async()=>{const r=await room(['甲','乙','丙']);await revealDifferent(r,['x','x','y']);const internal=game.rooms.get(r.sessions[0].roomCode);const snapshot=()=>JSON.stringify({players:[...internal.players],groups:internal.groups,proposals:internal.proposals,history:internal.history,submissions:internal.submissions,phase:internal.phase});let before=snapshot();expect((await emitAck(r.sockets[1]!,'room:leave')).ok).toBe(false);expect(snapshot()).toBe(before);const next=state(r.sockets[0]!,v=>v.phase==='writing'&&v.round===2);game.start(internal);const w=await next;const proposed=state(r.sockets[0]!,v=>v.proposals.length===1);await emitAck(r.sockets[0]!,'group:propose',{roundId:w.roundId,proposalVersion:0,word:'z'});const p=await proposed;before=snapshot();expect((await emitAck(r.sockets[1]!,'game:submit',{roundId:w.roundId,word:'绕过'})).ok).toBe(false);expect((await emitAck(r.sockets[1]!,'room:leave')).ok).toBe(false);expect((await emitAck(r.sockets[1]!,'group:propose',{roundId:w.roundId,proposalVersion:p.proposalVersion,word:'替换'})).ok).toBe(false);expect(snapshot()).toBe(before);const offline=state(r.sockets[0]!,v=>v.players.some((p:any)=>!p.connected));r.sockets[1]!.disconnect();await offline;const replacement=await client();const restored=state(replacement,v=>v.proposals.length===1);expect((await emitAck(replacement,'room:reconnect',r.sessions[1])).ok).toBe(true);expect((await restored).proposals[0].id).toBe(p.proposals[0].id);expect(internal.groups[0].members).toHaveLength(2)});
+ it('组员不能绕过候选提交，断线恢复候选',async()=>{const r=await room(['甲','乙','丙']);await revealDifferent(r,['x','x','y']);const internal=game.rooms.get(r.sessions[0].roomCode);const snapshot=()=>JSON.stringify({players:[...internal.players],groups:internal.groups,proposals:internal.proposals,history:internal.history,submissions:internal.submissions,phase:internal.phase});let before=snapshot();expect(snapshot()).toBe(before);const next=state(r.sockets[0]!,v=>v.phase==='writing'&&v.round===2);game.start(internal);const w=await next;const proposed=state(r.sockets[0]!,v=>v.proposals.length===1);await emitAck(r.sockets[0]!,'group:propose',{roundId:w.roundId,proposalVersion:0,word:'z'});const p=await proposed;before=snapshot();expect((await emitAck(r.sockets[1]!,'game:submit',{roundId:w.roundId,word:'绕过'})).ok).toBe(false);expect((await emitAck(r.sockets[1]!,'group:propose',{roundId:w.roundId,proposalVersion:p.proposalVersion,word:'替换'})).ok).toBe(false);expect(snapshot()).toBe(before);const offline=state(r.sockets[0]!,v=>v.players.some((p:any)=>!p.connected));r.sockets[1]!.disconnect();await offline;const replacement=await client();const restored=state(replacement,v=>v.proposals.length===1);expect((await emitAck(replacement,'room:reconnect',r.sessions[1])).ok).toBe(true);expect((await restored).proposals[0].id).toBe(p.proposals[0].id);expect(internal.groups[0].members).toHaveLength(2)});
  it('超时空词不合并，最大轮数结束且拒绝旧回合提交',async()=>{const r=await room();const internal=game.rooms.get(r.sessions[0].roomCode);internal.settings.maxRounds=1;expect((await emitAck(r.sockets[0]!,'game:submit',{roundId:'stale',word:'x'})).ok).toBe(false);const ended=state(r.sockets[0]!,v=>v.phase==='ended');game.timeout(internal,r.writing.roundId);const e=await ended;expect(e.endReason).toBe('max-rounds');expect(e.currentGroups).toEqual([]);expect(e.history[0].submissions.every((v:any)=>v.timedOut&&!v.word)).toBe(true);expect(e.history[0].result.endReason).toBe('max-rounds');expect((await emitAck(r.sockets[0]!,'game:submit',{roundId:r.writing.roundId,word:'x'})).ok).toBe(false)});
   it('历史保存准确时间和揭晓原因',async()=>{const r=await room();const first=await revealDifferent(r,['a','b']);expect(first.history[0].startedAt).toBeLessThanOrEqual(first.history[0].endedAt);expect(first.history[0].revealReason).toBe('all-submitted');expect(first.history[0].feed.map((f:any)=>f.kind)).toEqual(['submission'])});
  it('房主独占大厅设置，断线保留身份，结束后离开转交房主',async()=>{const a=await client(),b=await client();const session=(await emitAck(a,'room:create',{})).data;await emitAck(b,'room:join',{code:session.roomCode});const internal=game.rooms.get(session.roomCode);expect(internal.ownerId).toBe(session.playerId);expect((await emitAck(b,'lobby:settings',{timerSeconds:20,maxRounds:1})).ok).toBe(false);expect(internal.settings.timerSeconds).toBe(60);expect((await emitAck(a,'lobby:settings',{timerSeconds:10,maxRounds:1})).ok).toBe(true);const off=state(b,v=>!v.players[0].connected);a.disconnect();await off;expect(internal.ownerId).toBe(session.playerId);const replacement=await client();await emitAck(replacement,'room:reconnect',session);expect((await emitAck(replacement,'lobby:settings',{timerSeconds:15})).ok).toBe(true);await emitAck(replacement,'lobby:ready',true);const writing=state(b,v=>v.phase==='writing');await emitAck(b,'lobby:ready',true);const w=await writing;expect((await emitAck(replacement,'lobby:settings',{timerSeconds:30})).ok).toBe(false);const ended=state(b,v=>v.phase==='ended');game.timeout(internal,w.roundId);await ended;expect((await emitAck(replacement,'room:leave')).ok).toBe(true);expect(internal.ownerId).toBe([...internal.players.keys()][0]);expect((await emitAck(replacement,'room:reconnect',session)).ok).toBe(false)});
@@ -169,4 +169,42 @@ describe('全房间禁止重复词语',()=>{
   const started=state(r.sockets[0]!,v=>v.phase==='writing');await emitAck(r.sockets[1]!,'lobby:ready',true);const w=await started;
   expect(w.history).toEqual([]);expect(w.settings.preventRepeatWords).toBe(true);expect((await emitAck(r.sockets[0]!,'game:submit',{roundId:w.roundId,word:'苹果'})).ok).toBe(true);
  });
+});
+describe('游戏中主动退出',()=>{
+ it('作答中退出只剩一人立即结算，保留退出者本轮作答与身份，令牌失效',async()=>{
+  const r=await room();const internal=game.rooms.get(r.sessions[0].roomCode);
+  await emitAck(r.sockets[0]!,'game:submit',{roundId:r.writing.roundId,word:'星空'});
+  const ended=state(r.sockets[1]!,v=>v.phase==='ended');
+  expect((await emitAck(r.sockets[0]!,'room:leave')).ok).toBe(true);
+  const result=await ended;expect(result.endReason).toBe('insufficient-players');expect(result.players).toHaveLength(1);
+  expect(result.history[0].submissions[0].word).toBe('星空');expect(result.history[0].entities).toHaveLength(2);
+  expect(result.deadline).toBeNull();expect(result.nextRoundAt).toBeNull();
+  expect((await emitAck(r.sockets[0]!,'room:reconnect',r.sessions[0])).ok).toBe(false);
+  game.timeout(internal,r.writing.roundId);expect(internal.phase).toBe('ended');
+ });
+ it('揭晓中退出保留历史，剩两人继续，剩一人自动结算',async()=>{
+  const r=await room(['甲','乙','丙']);const first=await revealDifferent(r,['a','b','c']);
+  const internal=game.rooms.get(r.sessions[0].roomCode);const saved=JSON.stringify(internal.history);
+  expect((await emitAck(r.sockets[0]!,'room:leave')).ok).toBe(true);expect(internal.phase).toBe('reveal');
+  const ended=state(r.sockets[2]!,v=>v.phase==='ended');await emitAck(r.sockets[1]!,'room:leave');
+  const result=await ended;expect(result.endReason).toBe('insufficient-players');expect(JSON.stringify(internal.history)).toBe(saved);
+  expect(result.history[0].submissions).toEqual(first.history[0].submissions);
+ });
+ it('退出者的提交不计入剩余人数，剩余玩家提交后正常揭晓',async()=>{
+  const r=await room(['甲','乙','丙']);await emitAck(r.sockets[0]!,'game:submit',{roundId:r.writing.roundId,word:'旧词'});
+  await emitAck(r.sockets[0]!,'room:leave');const internal=game.rooms.get(r.sessions[0].roomCode);
+  await emitAck(r.sockets[1]!,'game:submit',{roundId:r.writing.roundId,word:'a'});expect(internal.phase).toBe('writing');
+  const revealed=state(r.sockets[2]!,v=>v.phase==='reveal');await emitAck(r.sockets[2]!,'game:submit',{roundId:r.writing.roundId,word:'b'});
+  expect((await revealed).history[0].submissions).toHaveLength(3);
+ });
+});
+
+it('组员退出使候选失效且聊天和旧回合历史保留',async()=>{
+ const r=await room(['甲','乙','丙']);await revealDifferent(r,['x','x','y']);const internal=game.rooms.get(r.sessions[0].roomCode);const saved=JSON.stringify(internal.history);
+ game.start(internal);const roundId=internal.roundId;
+ await emitAck(r.sockets[0]!,'group:propose',{roundId,proposalVersion:0,word:'候选'});
+ await emitAck(r.sockets[0]!,'group:chat',{roundId,text:'留下思考'});
+ await emitAck(r.sockets[0]!,'room:leave');expect(internal.proposals).toEqual([]);expect(internal.groups).toEqual([]);expect(JSON.stringify(internal.history)).toBe(saved);
+ const ended=state(r.sockets[1]!,v=>v.phase==='ended');await emitAck(r.sockets[2]!,'room:leave');const result=await ended;
+ expect(result.history[1].feed.some((f:any)=>f.text==='留下思考')).toBe(true);expect(result.history[1].proposals[0].status).toBe('invalidated');expect(result.history[1].entities).toHaveLength(3);
 });

@@ -18,7 +18,7 @@ const submitted = computed(() => game.room?.submittedPlayerIds.includes(game.me?
 // 上轮所有玩家的词语：首回合没有历史时为空，此时保留原提示语。
 const lastRound = computed(() => game.room?.history[game.room.history.length - 1]);
 const seconds = computed(() => { void tick.value; const remaining = countdown.remaining(game.room?.view === 'reveal' ? 'reveal' : 'writing'); return remaining === undefined ? undefined : Math.max(0, Math.ceil(remaining / 1000)); });
-async function act(event: string, data: unknown = null) { try { await game.act(event, data); } catch {} }
+async function act(event: string, data: unknown = null) { if (event === 'room:leave') { uni.showModal({ title: '退出游戏', content: '确定退出吗？退出后无法返回本局，回合历史会保留。', success: result => { if (result.confirm) void game.act(event, data).catch(() => {}); } }); return; } try { await game.act(event, data); } catch {} }
 // 房主移出玩家前二次确认，避免误触。
 function kick(playerId: string, nickname: string) { uni.showModal({ title: '移出玩家', content: `确定将「${nickname}」移出房间吗？`, success: result => { if (result.confirm) act('room:kick', { playerId }); } }); }
 // 输入即校验：命中敏感词立即清空输入框，避免违规内容停留在输入框里。
@@ -101,6 +101,7 @@ async function saveImages() {
       <view class="card"><text>{{ game.myGroup ? '仅同组可见的聊天' : '仅自己可见的思考' }}</text><view v-for="item in orderedTimeline(game.room.currentFeed)" :key="item.id"><text :style="{ color: playerColor(item.colorId) }">{{ formatEvent(item) }}</text></view><input v-model="chat" maxlength="200" placeholder="记录思考" @input="guard('chat').input($event.detail.value)" /><button :disabled="!game.available || !chat.trim()" @click="sendChat">发送</button></view>
     </template>
     <template v-else>
+      <text v-if="game.room.endReason === 'insufficient-players'" class="hint">只剩一位玩家，游戏已自动结束。</text>
       <text class="title">{{ game.room.view === 'reveal' ? '本轮揭晓' : game.room.endReason === 'all-same' ? '完美同频' : '游戏结束' }}</text>
       <view v-for="entry in game.room.visibleSubmissions" :key="entry.playerId" class="card"><text :style="{ color: playerColor(entry.colorId) }">{{ entry.nickname }}：{{ entry.timedOut ? '时间到' : entry.word || '空白' }}</text></view>
       <text v-if="game.room.view === 'reveal' && seconds !== undefined" class="hint">{{ seconds }} 秒后自动进入下一回合。</text>
