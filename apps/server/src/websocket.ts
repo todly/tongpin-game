@@ -23,9 +23,10 @@ export function validRequest(event: string, data: unknown): boolean {
       return (key === 'timerSeconds' || key === 'maxRounds') && typeof value === 'number' && Number.isFinite(value);
     });
     case 'game:rematch': return string(data.gameId, 64);
-    case 'game:submit': return string(data.roundId, 64) && string(data.word, 40);
+    case 'game:withdraw': return string(data.roundId, 64);
+    case 'game:submit': return string(data.roundId, 64) && string(data.word, 200);
     case 'group:chat': return string(data.roundId, 64) && string(data.text);
-    case 'group:propose': return string(data.roundId, 64) && Number.isInteger(data.proposalVersion) && string(data.word, 40);
+    case 'group:propose': return string(data.roundId, 64) && Number.isInteger(data.proposalVersion) && string(data.word, 200);
     case 'group:approve': case 'group:confirm': case 'group:reject': return string(data.roundId, 64) && Number.isInteger(data.proposalVersion) && string(data.proposalId, 64);
     default: return false;
   }

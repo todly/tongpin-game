@@ -48,9 +48,10 @@ export class GameStore {
     if(event==='lobby:settings'&&(!this.isOwner||r?.view!=='lobby'))throw new Error('只有大厅房主可以修改设置。');
     if(event.startsWith('lobby:')&&r?.view!=='lobby')throw new Error('请返回大厅操作。');
     if(event==='room:kick'&&(!this.isOwner||!r?.players.some(p=>p.id===(data as {playerId?:string})?.playerId&&p.id!==this.session?.playerId)))throw new Error('只有房主可以移出其他玩家。');
-    if(event.startsWith('group:')||event==='game:submit'){
+    if(event.startsWith('group:')||event==='game:submit'||event==='game:withdraw'){
       if(r?.view!=='writing')throw new Error('本回合已结束。');
-      if(event!=='group:chat'&&this.submitted)throw new Error('本轮已锁定。');
+      if(event!=='group:chat'&&event!=='game:withdraw'&&this.submitted)throw new Error('本轮已锁定。');
+      if(event==='game:withdraw'&&(this.myGroup||!this.submitted))throw new Error('仅未组队且已锁定时可以撤销。');
       if(event==='game:submit'&&this.myGroup)throw new Error('同组请使用候选词。');
       if(event==='group:propose'&&(!this.myGroup||this.candidate))throw new Error('当前不能提议候选。');
       if(['group:confirm','group:reject'].includes(event)&&!this.candidate)throw new Error('候选已变化。');

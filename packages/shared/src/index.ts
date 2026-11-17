@@ -32,7 +32,7 @@ export interface ClientToServerEvents{
  /** 房主将其他玩家移出房间；仅房主可用，不能踢自己。 */
  'room:kick':(p:{playerId:string},a:Ack<null>)=>void;
  'lobby:rename':(n:string,a?:Ack<null>)=>void;'lobby:ready':(r:boolean,a?:Ack<null>)=>void;'lobby:settings':(s:Partial<Settings>,a?:Ack<null>)=>void;
- 'game:submit':(p:{word:string;roundId:string},a?:Ack<null>)=>void;'group:propose':(p:RoundRef&{word:string},a?:Ack<null>)=>void;'group:approve':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:confirm':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:reject':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:chat':(p:{text:string;roundId:string},a?:Ack<null>)=>void;'game:rematch':(p:{gameId:string},a?:Ack<null>)=>void;
+ 'game:withdraw':(p:{roundId:string},a?:Ack<null>)=>void;'game:submit':(p:{word:string;roundId:string},a?:Ack<null>)=>void;'group:propose':(p:RoundRef&{word:string},a?:Ack<null>)=>void;'group:approve':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:confirm':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:reject':(p:RoundRef&{proposalId:string},a?:Ack<null>)=>void;'group:chat':(p:{text:string;roundId:string},a?:Ack<null>)=>void;'game:rematch':(p:{gameId:string},a?:Ack<null>)=>void;
 }
 export interface ServerToClientEvents{'room:state':(s:RoomState)=>void;'room:error':(m:string)=>void;/** 被房主移出房间时推送给被踢玩家。 */'room:kicked':(m:{reason:string})=>void}
 export type Ack<T>=(r:{ok:true;data:T}|{ok:false;error:string})=>void;
@@ -43,7 +43,7 @@ export const NICKNAME_PREFIXES=['快乐','勇敢','温柔','机灵','悠闲','�
 export const NICKNAME_FRUITS=['苹果','香蕉','草莓','葡萄','西瓜','芒果','蜜桃','柠檬','樱桃','蓝莓','荔枝','橙子','柚子','石榴','菠萝','椰子','木瓜','杨梅','枇杷','山楂','桑葚','李子','杏子','柿子','青提','雪梨','甘蔗','榴莲','芭乐','释迦','杨桃','龙眼'] as const;
 export function randomNickname(random=Math.random){return `${NICKNAME_PREFIXES[Math.floor(random()*NICKNAME_PREFIXES.length)]!}${NICKNAME_FRUITS[Math.floor(random()*NICKNAME_FRUITS.length)]!}`}
 export function normalizeNickname(v?:string){return Array.from(v?.trim().replace(/\s+/g,' ')||'').slice(0,12).join('')||randomNickname()}
-export function normalizeWord(v:string){return v.trim().replace(/\s+/g,' ').slice(0,40)}
+export function normalizeWord(v:string){return v.trim().replace(/\s+/g,' ')}
 export function sanitizeSettings(s:Partial<Settings>,c:Settings):Settings{
  const t=Math.round(Number(s.timerSeconds??c.timerSeconds)),r=Math.round(Number(s.maxRounds??c.maxRounds));
  const preventRepeatWords=typeof s.preventRepeatWords==='boolean'?s.preventRepeatWords:c.preventRepeatWords;

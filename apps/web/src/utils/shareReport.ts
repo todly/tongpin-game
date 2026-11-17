@@ -1,18 +1,18 @@
 import { toBlob } from 'html-to-image';
-export function paginate(heights:number[], limit=7000):number[][] {
+export function paginate(heights:number[], limit=3500):number[][] {
  const pages:number[][]=[];let page:number[]=[];let height=0;
  heights.forEach((h,i)=>{if(h>limit)throw new Error('单条记录过长，请减少记录长度后重试。');if(height+h>limit&&page.length){pages.push(page);page=[];height=0;}page.push(i);height+=h;});if(page.length)pages.push(page);return pages;
 }
-export async function exportReport(root:HTMLElement):Promise<File[]> {
+export async function exportReport(root:HTMLElement,quality:2|3|4=3):Promise<File[]> {
  await document.fonts.ready;
  await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
  const blocks=Array.from(root.querySelectorAll<HTMLElement>('[data-report-block]'));
- const pages=paginate(blocks.map(b=>b.getBoundingClientRect().height+24));
+ const pages=paginate(blocks.map(b=>b.getBoundingClientRect().height+24),7000/quality);
  const files:File[]=[];
  for(const [index,indices] of pages.entries()) {
  const page=document.createElement('div');page.className='share-report export-page';page.style.width='640px';
  indices.forEach(i=>page.append(blocks[i]!.cloneNode(true)));document.body.append(page);
- try {const blob=await toBlob(page,{pixelRatio:1,backgroundColor:'#ffffff',width:640});if(!blob)throw new Error('图片生成失败，请重试。');files.push(new File([blob],`同频游戏-${index+1}.png`,{type:'image/png'}));}finally{page.remove();}
+ try {const blob=await toBlob(page,{pixelRatio:quality,backgroundColor:'#ffffff',width:640});if(!blob)throw new Error('图片生成失败，请重试。');files.push(new File([blob],`同频游戏-${index+1}.png`,{type:'image/png'}));}finally{page.remove();}
  }
  return files;
 }

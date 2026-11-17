@@ -40,3 +40,5 @@ it.each([220,320,375,640])('长昵称在%s宽度下单行省略且短答案垂�
  expect(name.lines).toHaveLength(1);expect(value.measure(name.lines![0]!,name.size!,name.weight).width).toBeLessThanOrEqual(name.w);
  expect(name.baseline).toBe('middle');expect(name.y).toBe(word.y);expect(name.h).toBe(word.h);expect(row.h).toBe(31);
 });
+
+it('默认超清，三档输出尺寸递增且内容不变',()=>{const state=room([round(1,[])]);expect(reportPages(state,false,measure)[0]!.width).toBe(1920);const pages=([2,3,4] as const).map(q=>reportPages(state,false,measure,q)[0]!);expect(pages.map(p=>p.width)).toEqual([1280,1920,2560]);expect(pages.map(p=>p.scale)).toEqual([2,3,4]);expect(pages[2]!.nodes.map(n=>n.lines)).toEqual(pages[0]!.nodes.map(n=>n.lines));});

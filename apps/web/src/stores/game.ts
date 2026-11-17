@@ -88,6 +88,7 @@ export const useGameStore = defineStore('game', () => {
     rename: (nickname: string) => emit('lobby:rename', nickname),
     ready: (ready: boolean) => emit('lobby:ready', ready),
     settings: (settings: Partial<Settings>) => isOwner.value && room.value?.view === 'lobby' ? emit('lobby:settings', settings) : blocked('只有房主可以在大厅修改设置。'),
+    withdraw: () => emit('game:withdraw', { roundId: room.value?.roundId }),
     submit: (word: string) => myGroup.value ? blocked('小组成员只能提议、同意或否决候选词。') : emit('game:submit', { word, roundId: room.value?.roundId }),
     propose: (word: string) => emit('group:propose', { word, roundId: room.value?.roundId, proposalVersion: room.value?.proposalVersion }),
     confirm: (proposalId: string) => emit('group:confirm', { proposalId, roundId: room.value?.roundId, proposalVersion: room.value?.proposalVersion }),

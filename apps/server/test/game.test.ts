@@ -10,6 +10,30 @@ const client=async()=>{const s=connect(url,{transports:['websocket'],forceNew:tr
 async function room(names=['Ada','Bo'],settings:{preventRepeatWords?:boolean;maxRounds?:number}={}){const sockets=await Promise.all(names.map(()=>client()));const created=await emitAck(sockets[0]!,'room:create',{colorId:0 as const,returnedToLobby:false,nickname:names[0]});const sessions=[created.data];for(let i=1;i<sockets.length;i++)sessions.push((await emitAck(sockets[i]!,'room:join',{code:created.data.roomCode,colorId:0 as const,returnedToLobby:false,nickname:names[i]})).data);await emitAck(sockets[0]!,'lobby:settings',{timerSeconds:10,maxRounds:3,...settings});for(let i=0;i<sockets.length-1;i++)await emitAck(sockets[i]!,'lobby:ready',true);const waiting=state(sockets[0]!,v=>v.phase==='writing');await emitAck(sockets.at(-1)!,'lobby:ready',true);return{sockets,sessions,writing:await waiting}}
 async function revealDifferent(r:Awaited<ReturnType<typeof room>>,words:string[]){const wait=state(r.sockets[0]!,v=>v.phase==='reveal');for(let i=0;i<words.length;i++)await emitAck(r.sockets[i]!,'game:submit',{word:words[i],roundId:r.writing.roundId});return wait}
 describe('游戏服务端',()=>{
+ it('单人撤销后保留聊天、可重新提交，拒绝旧回合、重复撤销及揭晓后撤销',async()=>{
+  const r=await room();const a=r.sockets[0]!;const ref={roundId:r.writing.roundId};
+  const tooLong=await emitAck(a,'game:submit',{...ref,word:'一'.repeat(13)});expect(tooLong.ok).toBe(false);expect(tooLong.error).toBe('每轮词语最多 12 个字。');
+  await emitAck(a,'group:chat',{...ref,text:'保留思考'});
+  expect((await emitAck(a,'game:submit',{...ref,word:'一'.repeat(12)})).ok).toBe(true);
+  expect((await emitAck(a,'game:withdraw',{roundId:'stale'})).ok).toBe(false);
+  const withdrawn=state(a,v=>v.submittedPlayerIds.length===0);
+  expect((await emitAck(a,'game:withdraw',ref)).ok).toBe(true);
+  const w=await withdrawn;expect(w.currentFeed.map((x:any)=>x.kind)).toEqual(['chat']);
+  expect((await emitAck(a,'game:withdraw',ref)).ok).toBe(false);
+  await emitAck(a,'game:submit',{...ref,word:'星空'});
+  await emitAck(r.sockets[1]!,'game:submit',{...ref,word:'星空'});
+  expect((await emitAck(a,'game:withdraw',ref)).ok).toBe(false);
+ });
+ it('小组已锁定不允许单人撤销，候选词也限制12字',async()=>{
+  const r=await room(['甲','乙','丙']);await revealDifferent(r,['星','星','海']);
+  const internal=game.rooms.get(r.sessions[0].roomCode);const next=state(r.sockets[0]!,v=>v.phase==='writing'&&v.round===2);game.start(internal);const w=await next;
+  const ref={roundId:w.roundId,proposalVersion:0};
+  expect((await emitAck(r.sockets[0]!,'group:propose',{...ref,word:'一'.repeat(13)})).ok).toBe(false);
+  const proposed=state(r.sockets[0]!,v=>v.proposals.length===1);await emitAck(r.sockets[0]!,'group:propose',{...ref,word:'月'});const p=await proposed;
+  await emitAck(r.sockets[1]!,'group:confirm',{roundId:w.roundId,proposalVersion:p.proposalVersion,proposalId:p.proposals[0].id});
+  expect((await emitAck(r.sockets[0]!,'game:withdraw',{roundId:w.roundId})).ok).toBe(false);
+ });
+
  it('Socket.IO 每次按玩家发送状态时刷新 serverNow',async()=>{const a=await client(),b=await client();const firstState=state(a,v=>typeof v.serverNow==='number');const created=await emitAck(a,'room:create',{});const first=await firstState;await new Promise(r=>setTimeout(r,5));const nextState=state(a,v=>v.players.length===2);await emitAck(b,'room:join',{code:created.data.roomCode});const second=await nextState;expect(second.serverNow).toBeGreaterThan(first.serverNow);expect(second.serverNow).toBeLessThanOrEqual(Date.now())});
  it('六人颜色唯一，个人返房和重连稳定，结果冻结，在线全员返回才开新局',async()=>{
   const r=await room(['甲','乙','丙','丁','戊','己']);const colors=r.writing.players.map((p:any)=>p.colorId);expect(new Set(colors).size).toBe(6);
