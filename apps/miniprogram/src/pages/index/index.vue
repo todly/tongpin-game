@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, onUnmounted, ref, watch } from 'vue';
 import { onLoad, onShareAppMessage } from '@dcloudio/uni-app';
-import { playerColor, formatEvent, orderedTimeline, randomNickname, syncInput, SafeMonotonic, StateCountdown, createContentGuard } from '@word-sync/shared';
+import { playerColor, formatEvent, orderedTimeline, loadNickname, rememberNickname, syncInput, SafeMonotonic, StateCountdown, createContentGuard } from '@word-sync/shared';
 import { useGameStore } from '../../stores/game';
 import { exportReport } from '../../utils/report';
-const game = useGameStore(), nickname = ref(randomNickname()), code = ref(''), word = ref(''), chat = ref(''), history = ref(false), logs = ref(false), exporting = ref(false), files = ref<string[]>([]), message = ref(''), tick = ref(0);
+const game = useGameStore(), nickname = ref(loadNickname(uni)), code = ref(''), word = ref(''), chat = ref(''), history = ref(false), logs = ref(false), exporting = ref(false), files = ref<string[]>([]), message = ref(''), tick = ref(0);
+let nicknameEdited=false;
 const quality=ref<2|3|4>(3);
 const performanceClock = (globalThis as any).wx?.getPerformance?.();
 const monotonic = new SafeMonotonic(() => performanceClock?.now?.() ?? Date.now());
@@ -19,12 +20,13 @@ const submitted = computed(() => game.room?.submittedPlayerIds.includes(game.me?
 // 上轮所有玩家的词语：首回合没有历史时为空，此时保留原提示语。
 const lastRound = computed(() => game.room?.history[game.room.history.length - 1]);
 const seconds = computed(() => { void tick.value; const remaining = countdown.remaining(game.room?.view === 'reveal' ? 'reveal' : 'writing'); return remaining === undefined ? undefined : Math.max(0, Math.ceil(remaining / 1000)); });
-async function act(event: string, data: unknown = null) { if (event === 'room:leave') { uni.showModal({ title: '退出游戏', content: '确定退出吗？退出后无法返回本局，回合历史会保留。', success: result => { if (result.confirm) void game.act(event, data).catch(() => {}); } }); return; } try { await game.act(event, data); } catch {} }
+async function act(event: string, data: unknown = null) { if (event === 'room:leave') { uni.showModal({ title: '退出游戏', content: '确定退出吗？退出后无法返回本局，回合历史会保留。', success: result => { if (result.confirm) void game.act(event, data).catch(() => {}); } }); return; } const savedNickname = event === 'lobby:rename' ? String(data) : (event === 'room:create' || event === 'room:join') && nicknameEdited ? (data as {nickname:string}).nickname : ''; try { await game.act(event, data); if (savedNickname) rememberNickname(uni, savedNickname); } catch {} }
 // 房主移出玩家前二次确认，避免误触。
 function kick(playerId: string, nickname: string) { uni.showModal({ title: '移出玩家', content: `确定将「${nickname}」移出房间吗？`, success: result => { if (result.confirm) act('room:kick', { playerId }); } }); }
 // 输入即校验：命中敏感词立即清空输入框，避免违规内容停留在输入框里。
 const guards: Record<string, ReturnType<typeof createContentGuard>> = {};
 function guard(kind: 'nickname' | 'word' | 'chat') {
+  if (kind === 'nickname') nicknameEdited=true;
   return guards[kind] ??= createContentGuard({
     check: text => game.check(text, kind === 'nickname' ? 1 : 5),
     onHit: tip => {

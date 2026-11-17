@@ -58,3 +58,5 @@ export function mergeGroups(existing:Group[],confirmed:GroupProposal[],players:P
  return sets.filter(s=>s.size>1).map((s,i)=>{const prior=existing.find(g=>g.members.some(id=>s.has(id)));const proposal=confirmed.find(p=>p.memberIds.some(id=>s.has(id)));const members=[...s];return{id:prior?.id??`group-${round}-${i+1}`,word:proposal?.word??prior?.word??'',members,memberNames:members.map(id=>players.find(p=>p.id===id)?.nickname??id),createdRound:prior?.createdRound??round}})
 }
 export function sameNonBlankWord(s:Submission[],count:number){if(s.length!==count||count<MIN_PLAYERS||s.some(x=>x.timedOut||!x.word))return;const first=s[0]!.word.toLocaleLowerCase('zh-CN');return s.every(x=>x.word.toLocaleLowerCase('zh-CN')===first)?s[0]!.word:undefined}
+
+export { loadNickname, rememberNickname } from './nickname-memory.js';

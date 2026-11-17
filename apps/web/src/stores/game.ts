@@ -3,6 +3,8 @@ import { defineStore } from 'pinia';
 import { io, type Socket } from 'socket.io-client';
 import type { Ack, ClientToServerEvents, RoomState, ServerToClientEvents, SessionPayload, Settings } from '@word-sync/shared';
 
+import { saveNickname } from '../utils/nickname';
+
 const STORAGE = 'brainwave-sync-session';
 export const useGameStore = defineStore('game', () => {
   const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(import.meta.env.VITE_SERVER_URL || undefined, { autoConnect: false });
@@ -85,7 +87,7 @@ export const useGameStore = defineStore('game', () => {
     room, session, error, connected, connecting, available, restoring, isOwner, canLeave, me, myGroup, kick,
     create: (nickname?: string) => enter('room:create', { nickname }),
     join: (code: string, nickname?: string) => enter('room:join', { code: code.trim().toUpperCase(), nickname }),
-    rename: (nickname: string) => emit('lobby:rename', nickname),
+    rename: async (nickname: string) => { await emit('lobby:rename', nickname); saveNickname(nickname); },
     ready: (ready: boolean) => emit('lobby:ready', ready),
     settings: (settings: Partial<Settings>) => isOwner.value && room.value?.view === 'lobby' ? emit('lobby:settings', settings) : blocked('只有房主可以在大厅修改设置。'),
     withdraw: () => emit('game:withdraw', { roundId: room.value?.roundId }),

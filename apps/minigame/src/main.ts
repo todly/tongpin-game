@@ -1,4 +1,4 @@
-import { randomNickname, playerColor, orderedTimeline, formatEvent, normalizeNickname, normalizeWord, createContentGuard } from '@word-sync/shared';
+import { loadNickname, rememberNickname, randomNickname, playerColor, orderedTimeline, formatEvent, normalizeNickname, normalizeWord, createContentGuard } from '@word-sync/shared';
 import { GameStore } from './stores/game';
 import { Keyboard } from './ui/keyboard';
 import { Clipboard } from './platform/clipboard';
@@ -10,7 +10,8 @@ import { render, hit } from './ui/renderer';
 import { canvasMeasure } from './ui/text';
 const game=new GameStore(),keyboard=new Keyboard(wx,()=>draw()),canvas=wx.createCanvas(),ctx=canvas.getContext('2d');
 let width=0,height=0,top=0,bottom=0,scroll=0,active=true;
-let nickname=randomNickname(),code='',chat='',history=false,logs=false,exporting=false,files:string[]=[],quality:2|3|4=3;
+let nicknameEdited=false;
+let nickname=loadNickname(wx),code='',chat='',history=false,logs=false,exporting=false,files:string[]=[],quality:2|3|4=3;
 const toast=new Toast();
 const clipboard=new Clipboard(wx,message=>{toast.push(message);draw();});
 let footerTop=0,fullHeight=0;
@@ -18,7 +19,7 @@ const expanded=new Set<number>();
 let newestRoundFirst=false;
 let body:Layout,header:Layout,footer:Layout,viewport={x:0,y:0,w:0,h:0};
 function resize(){const info=wx.getSystemInfoSync();width=info.windowWidth;height=info.windowHeight;fullHeight=keyboard.state==='idle'?height:Math.max(fullHeight,height);const dpr=info.pixelRatio||1;canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);top=Math.max(16,info.safeArea?.top||0);try{const rect=wx.getMenuButtonBoundingClientRect?.();top=Math.max(top,rect&&Number.isFinite(rect.bottom)&&rect.bottom>0?rect.bottom+12:top+48);}catch{top+=48;}bottom=Math.max(16,height-(info.safeArea?.bottom||height));draw();}
-function run(event:string,data:unknown=null){if(event==='room:leave'){keyboard.close();wx.showModal({title:'退出游戏',content:'确定退出吗？退出后无法返回本局。',success:(res:{confirm:boolean})=>{if(res.confirm)void game.act(event,data).catch(()=>draw());}});return;}keyboard.close();if(event==='room:create'||event==='room:join')data={...(data as object),nickname:normalizeNickname(nickname),...(event==='room:join'?{code:code.trim().toUpperCase()}: {})};if(event==='lobby:rename')data=normalizeNickname(nickname);if(event==='game:submit'||event==='group:propose')data={...(data as object),word:normalizeWord(game.word)};toast.clear();void game.act(event,data).catch(()=>{draw();});}
+function run(event:string,data:unknown=null){if(event==='room:leave'){keyboard.close();wx.showModal({title:'退出游戏',content:'确定退出吗？退出后无法返回本局。',success:(res:{confirm:boolean})=>{if(res.confirm)void game.act(event,data).catch(()=>draw());}});return;}keyboard.close();if(event==='room:create'||event==='room:join')data={...(data as object),nickname:normalizeNickname(nickname),...(event==='room:join'?{code:code.trim().toUpperCase()}: {})};if(event==='lobby:rename')data=normalizeNickname(nickname);if(event==='game:submit'||event==='group:propose')data={...(data as object),word:normalizeWord(game.word)};const savedNickname=event==='lobby:rename'?String(data):((event==='room:create'||event==='room:join')&&nicknameEdited?(data as {nickname:string}).nickname:'');toast.clear();void game.act(event,data).then(()=>{if(savedNickname&&!game.error)rememberNickname(wx,savedNickname);}).catch(()=>{draw();});}
 function stamp(){return `${game.room?.view}|${game.room?.roundId}|${game.candidate?.id}|${game.submitted}|${game.session?.playerId}`;}
 // 输入即校验：命中敏感词立即清空输入框，避免违规内容停留在输入框里。
 type ContentGuard = ReturnType<typeof createContentGuard>;
@@ -32,7 +33,7 @@ function guard(kind:'nickname'|'word'|'chat'){
     },
   });
 }
-function input(kind:'nickname'|'code'|'word'|'chat'){const key=stamp();keyboard.open(kind,{nickname,code,word:game.word,chat}[kind],()=>active&&key===stamp()&&game.available,v=>{if(kind==='nickname')nickname=v;if(kind==='code')code=v;if(kind==='word')game.word=v;if(kind==='chat')chat=v;if(kind!=='code')guard(kind).input(v);draw();});}
+function input(kind:'nickname'|'code'|'word'|'chat'){const key=stamp();keyboard.open(kind,{nickname,code,word:game.word,chat}[kind],()=>active&&key===stamp()&&game.available,v=>{if(kind==='nickname'){nickname=v;nicknameEdited=true;}if(kind==='code')code=v;if(kind==='word')game.word=v;if(kind==='chat')chat=v;if(kind!=='code')guard(kind).input(v);draw();});}
 function copyCode(){clipboard.copy(game.room?.code||'');}
 function share(){wx.shareAppMessage({title:'来同频脑电波，看看我们能否想到一起',query:game.room?`roomCode=${encodeURIComponent(game.room.code)}`:''});}
 async function generate(){if(!game.room||exporting)return;const identity=game.session?.playerId,gameId=game.room.gameId;exporting=true;draw();try{const generated=await exportReport(JSON.parse(JSON.stringify(game.room)),logs,wx,quality);if(identity!==game.session?.playerId||gameId!==game.room?.gameId)return;files=generated;toast.push(`图片已生成，点击查看图片后可长按自行保存。`);}catch(e){toast.push((e as Error).message);}finally{exporting=false;draw();}}
@@ -141,7 +142,7 @@ function draw(){if(!active||!width)return;
   header.y=textBottom-subtitleMetrics.baseline-subtitleMetrics.descent;
   header.text(subtitle,11,'#aaa3bf',subtitleX,width-header.inset-subtitleX,'left',400,0);
  }
- if(game.recovering)body.text('连接或身份恢复中，请稍候。',13,'#ffc078'); if(!room){body.text('灵感交汇 / WORD SYNC',10,'#b9afe9',body.inset,body.contentWidth,'left',500,16);body.card(()=>{body.fieldButton(field(body,'你的昵称','nickname'),'随机昵称',()=>{nickname=randomNickname();draw();},game.available);body.button('创建房间',()=>run('room:create',{nickname}),game.available);body.y+=8;body.box(body.y,1,body.inset,body.contentWidth,'#39364e','',0);body.y+=18;field(body,'加入别人的房间','code',game.available,'输入六位房间码');secondary(body,'加入房间',()=>run('room:join',{code,nickname}),game.available&&code.length===6);});body.card(()=>{body.text('怎么玩',15,'#e8e1f4',body.inset,body.contentWidth,'left',600,14);
+ if(game.recovering)body.text('连接或身份恢复中，请稍候。',13,'#ffc078'); if(!room){body.text('灵感交汇 / WORD SYNC',10,'#b9afe9',body.inset,body.contentWidth,'left',500,16);body.card(()=>{body.fieldButton(field(body,'你的昵称','nickname'),'随机昵称',()=>{nickname=randomNickname();nicknameEdited=false;draw();},game.available);body.button('创建房间',()=>run('room:create',{nickname}),game.available);body.y+=8;body.box(body.y,1,body.inset,body.contentWidth,'#39364e','',0);body.y+=18;field(body,'加入别人的房间','code',game.available,'输入六位房间码');secondary(body,'加入房间',()=>run('room:join',{code,nickname}),game.available&&code.length===6);});body.card(()=>{body.text('怎么玩',15,'#e8e1f4',body.inset,body.contentWidth,'left',600,14);
  for(const [i,tip] of ['首轮自由写一个词，看看大家的想法','根据上轮词语联想或寻找共同点，写出新词','同词伙伴合组，候选词全组同意后锁定','全员同词获胜，达到回合上限揭晓'].entries()){
   const y=body.y;body.box(y,20,body.inset,20,'#35304d','',7);body.text(String(i+1),10,'#c9b8f3',body.inset,20,'center',600,0);Object.assign(body.nodes[body.nodes.length-1]!,{y,h:20,baseline:'middle'});
   body.y=y+3;body.text(tip,12,muted,body.inset+30,body.contentWidth-30,'left',400,0);body.y=Math.max(y+20,body.y)+12;
