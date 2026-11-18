@@ -126,11 +126,16 @@ function draw(){if(!active||!width)return;
  header.y=top;const room=game.room;
  // 顶栏拥有独立安全区、字号层级和 44px 触控范围。
  if(room){
-  const playing=room.view==='writing'||room.view==='reveal';
-  Object.assign(secondary(header,playing?'退出':'邀请',()=>playing?run('room:leave'):share(),playing?game.available:true,16,52),{size:13,h:44});
+  const inLobby=room.view==='lobby';
+  const canExit=inLobby||room.view==='writing'||room.view==='reveal';
+  Object.assign(secondary(header,canExit?'退出':'邀请',canExit?()=>run('room:leave'):share,!canExit||game.available,16,52),{size:13,h:44});
   header.y=top;const label=width<360?`${room.code} · 复制`:`房间 ${room.code} · 复制`;
   const n=header.button(label,copyCode,true,76,width-152,'#282b42','#ececf5',44);n.size=13;
-  header.y=top;Object.assign(secondary(header,history?'返回':'历史',()=>{history=!history;scroll=0;keyboard.close();draw();},true,width-68,52),{size:13,h:44});
+  header.y=top;
+  const rightButton=inLobby
+   ? secondary(header,'邀请',share,true,width-68,52)
+   : secondary(header,history?'返回':'历史',()=>{history=!history;scroll=0;keyboard.close();draw();},true,width-68,52);
+  Object.assign(rightButton,{size:13,h:44});
  }
 
  else {
@@ -158,7 +163,7 @@ function draw(){if(!active||!width)return;
    draw();
   },newestRoundFirst);
  }
- else if(room.view==='lobby'){body.heading('相遇 / GATHER','房间大厅',`${room.players.length}/6 位伙伴`);body.card(()=>{players(body);body.y-=14;},'#3e3856','#232238');body.text('修改昵称',12,muted);{const y=body.y;const n=body.button(nickname||'点此输入',()=>input('nickname'),game.available,20,width-116,'#121421','#f6f2eb',44);n.field='nickname';n.focused=keyboard.kind==='nickname';if(!nickname){n.size=12;n.weight=400;n.color=muted;n.metrics=body.measure(n.text||'',12,400);}n.stroke='#4a4d60';body.y=y;const saveButton=secondary(body,'保存',()=>run('lobby:rename',nickname),game.available,width-88,68);saveButton.h=44;body.y=y+60;}settings(body);secondary(body,'离开房间',()=>run('room:leave'),game.available);footer.button(game.me?.ready?'取消准备':'我准备好了',()=>run('lobby:ready',!game.me?.ready),game.available,20,width-40,game.me?.ready?violet:lime,game.me?.ready?'#ffffff':'#17191f');}
+ else if(room.view==='lobby'){body.heading('相遇 / GATHER','房间大厅',`${room.players.length}/6 位伙伴`);body.card(()=>{players(body);body.y-=14;},'#3e3856','#232238');body.text('修改昵称',12,muted);{const y=body.y;const n=body.button(nickname||'点此输入',()=>input('nickname'),game.available,20,width-116,'#121421','#f6f2eb',44);n.field='nickname';n.focused=keyboard.kind==='nickname';if(!nickname){n.size=12;n.weight=400;n.color=muted;n.metrics=body.measure(n.text||'',12,400);}n.stroke='#4a4d60';body.y=y;const saveButton=secondary(body,'保存',()=>run('lobby:rename',nickname),game.available,width-88,68);saveButton.h=44;body.y=y+60;}settings(body);footer.button(game.me?.ready?'取消准备':'我准备好了',()=>run('lobby:ready',!game.me?.ready),game.available,20,width-40,game.me?.ready?violet:lime,game.me?.ready?'#ffffff':'#17191f');}
  else if(room.view==='writing'){body.heading('灵感 / THINK',`第 ${room.round} 回合`,`${room.submittedPlayerIds.length}/${room.players.length} 已锁定`);{const seconds=deadlineSeconds(game.remaining('writing'),0);if(seconds!==undefined)body.timer(seconds,room.settings.timerSeconds);}
  // 上轮词语直接整合到玩家行，独立列位于昵称与锁定状态之间。
  players(body);
@@ -179,7 +184,7 @@ wx.onTouchStart((e:any)=>{const p=e.touches[0];if(p)touch={x:p.clientX,y:p.clien
 wx.onTouchMove((e:any)=>{const p=e.touches[0];if(!p||!touch)return;if(Math.hypot(p.clientX-touch.x,p.clientY-touch.y)>6)touch.moved=true;if(touch.moved&&touch.body){scroll=clamp(scroll+touch.last-p.clientY,Math.max(0,body.y-viewport.h));draw();}touch.last=p.clientY;});
 wx.onTouchEnd(()=>{if(touch&&!touch.moved){const {x,y}=touch;const n=hit(header.nodes,x,y)||hit(footer.nodes,x,y,footerTop)||(contains(viewport,x,y)?hit(body.nodes,x,y,viewport.y-scroll):undefined);n?.action?.();}touch=undefined;});
 wx.onTouchCancel(()=>{touch=undefined;});
-let previousStamp='',previousScrollKey='',previousIdentity='',previousGame='',previousNickname='';game.subscribe(()=>{toast.observeError(game.error);const identity=game.session?.playerId||'',gameId=game.room?.gameId||'';if(identity!==previousIdentity||(gameId&&gameId!==previousGame)){files=[];logs=false;toast.clear();history=false;expanded.clear();previousIdentity=identity;if(gameId)previousGame=gameId;}const key=stamp();if(key!==previousStamp){keyboard.close();previousStamp=key;}const scrollKey=`${identity}|${game.room?.view}|${game.room?.roundId}|${gameId}`;if(scrollKey!==previousScrollKey){chat='';scroll=0;previousScrollKey=scrollKey;}if(game.me&&`${identity}|${game.me.nickname}`!==previousNickname){nickname=game.me.nickname;previousNickname=`${identity}|${game.me.nickname}`;}draw();});
+let previousStamp='',previousScrollKey='',previousIdentity='',previousGame='',previousNickname='';game.subscribe(()=>{if(game.room?.view==='lobby')history=false;toast.observeError(game.error);const identity=game.session?.playerId||'',gameId=game.room?.gameId||'';if(identity!==previousIdentity||(gameId&&gameId!==previousGame)){files=[];logs=false;toast.clear();history=false;expanded.clear();previousIdentity=identity;if(gameId)previousGame=gameId;}const key=stamp();if(key!==previousStamp){keyboard.close();previousStamp=key;}const scrollKey=`${identity}|${game.room?.view}|${game.room?.roundId}|${gameId}`;if(scrollKey!==previousScrollKey){chat='';scroll=0;previousScrollKey=scrollKey;}if(game.me&&`${identity}|${game.me.nickname}`!==previousNickname){nickname=game.me.nickname;previousNickname=`${identity}|${game.me.nickname}`;}draw();});
 function query(q:any){if(typeof q?.roomCode==='string'&&!game.session)code=q.roomCode.slice(0,6).toUpperCase();}
 query(wx.getLaunchOptionsSync()?.query);wx.onShow((e:any)=>{active=true;query(e?.query);game.show();draw();});wx.onHide(()=>{active=false;touch=undefined;keyboard.close();game.hide();});wx.onWindowResize(resize);wx.showShareMenu({menus:['shareAppMessage']});wx.onShareAppMessage(()=>({title:'来同频脑电波，看看我们能否想到一起',query:game.room?`roomCode=${encodeURIComponent(game.room.code)}`:''}));
 setInterval(draw,250);resize();game.show();
