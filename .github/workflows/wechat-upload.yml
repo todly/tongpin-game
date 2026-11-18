@@ -1,0 +1,80 @@
+name: Upload WeChat development build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_branch:
+        description: Branch to build and upload
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wechat-upload
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ${{ vars.WECHAT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 25
+    env:
+      WECHAT_TARGET: ${{ vars.WECHAT_TARGET || 'miniprogram' }}
+      WECHAT_APPID: ${{ vars.WECHAT_APPID }}
+      WECHAT_CLOUD_ENV: ${{ vars.WECHAT_CLOUD_ENV }}
+      WECHAT_CLOUD_SERVICE: ${{ vars.WECHAT_CLOUD_SERVICE }}
+
+    steps:
+      - name: Check out release tooling
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Save release tooling
+        run: cp scripts/wechat-release.cjs "$RUNNER_TEMP/wechat-release.cjs"
+
+      - uses: actions/checkout@v6
+        with:
+          ref: refs/heads/${{ inputs.build_branch }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: npm install --global --no-audit --no-fund "$(node -p 'require("./package.json").packageManager')"
+
+      - name: Configure WeChat target
+        run: node "$RUNNER_TEMP/wechat-release.cjs" configure
+
+      - name: Build WeChat client
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @word-sync/shared build
+          if [[ "$WECHAT_TARGET" == minigame ]]; then
+            pnpm --filter @word-sync/minigame build:production
+            pnpm --filter @word-sync/minigame checkbundle
+          else
+            pnpm --filter @word-sync/miniprogram build:mp-weixin
+          fi
+
+      - name: Install WeChat upload CLI
+        run: |
+          ci_dir="$(mktemp -d "$RUNNER_TEMP/wechat-ci.XXXXXX")"
+          echo "WECHAT_CI_DIR=$ci_dir" >> "$GITHUB_ENV"
+          npm install --prefix "$ci_dir" --no-audit --no-fund miniprogram-ci@2.1.31
+
+      - name: Upload development version
+        env:
+          WECHAT_UPLOAD_KEY: ${{ secrets.WECHAT_UPLOAD_KEY }}
+        run: |
+          export WECHAT_BUILD_SHA="$(git rev-parse HEAD)"
+          node "$RUNNER_TEMP/wechat-release.cjs" upload
+
+      - name: Remove upload tool
+        if: always() && env.WECHAT_CI_DIR != ''
+        run: rm -rf -- "$WECHAT_CI_DIR"

@@ -24,7 +24,7 @@ pnpm --filter @word-sync/minigame build:production
 
 开发者工具导入 **`apps/minigame/dist`**，该目录生成 `game.js`、`game.json`、`project.config.json`，`compileType=game`。根目录的项目配置和私有配置不会被覆盖。`config.local.json` 填本人有权限的真实小游戏 `appid`、云环境 `env`、服务 `service`，示例故意全部留空、不编造；本地 `localUrl` 默认 `ws://localhost:3000/ws`，手机不能使用自己的 localhost。上传模式禁止本地配置。不要提交私有配置或令牌。
 
-云托管部署沿用下节单实例及 `/ws` 网关要求，不自动开通、收费、部署或上传。使用真实小游戏账号在开发工具导入产物，检查云连接、Canvas 安全区/DPR、四类键盘、滚动、前后台恢复和相册授权；通过后手动上传，在小游戏管理后台设置体验版、添加体验成员并扫码。工具基础库需支持 `wx.cloud.connectContainer`，环境和服务访问权限需由账号拥有者配置。服务重启清房及清令牌，不能将构建通过当成云部署或真机通过。
+云托管部署沿用下节单实例及 `/ws` 网关要求。自动上传客户端的配置见「微信客户端云端构建与上传」。使用真实小游戏账号在开发工具导入产物，检查云连接、Canvas 安全区/DPR、四类键盘、滚动、前后台恢复和相册授权；通过后手动上传，在小游戏管理后台设置体验版、添加体验成员并扫码。工具基础库需支持 `wx.cloud.connectContainer`，环境和服务访问权限需由账号拥有者配置。服务重启清房及清令牌，不能将构建通过当成云部署或真机通过。
 
 恢复令牌仅存 `wx` storage。隐藏立即关闭连接、取消重试及键盘，保留令牌；显示重新连接且等待恢复 ACK 和新的个人定向状态才允许写操作。旧连接/ACK/键盘代次失效，不自动重放结果未知的操作。邀请分享使用小游戏 `query=roomCode=...`，没有小程序 page path 或令牌。纪念图默认仅含全部回合词，明确勾选授权后才加入本人可见日志；生成后由用户点击查看图片，在微信图片查看界面长按自行保存；小游戏不再调用相册保存接口。
 
@@ -50,7 +50,7 @@ pnpm --filter @word-sync/miniprogram build:mp-weixin
 
 ### 微信云托管与体验成员
 
-本项目不会自动开通资源、上传或部署。用户确认费用后在自己的微信小程序账号下执行：
+首次开通微信云托管资源时，用户确认费用后在自己的微信小程序账号下执行：
 
 1. 在微信开发者工具或微信云托管控制台开通关联的小程序云环境，记下真实环境 ID；创建服务并记下真实服务名。确认小程序拥有该环境访问权限，跨环境使用需单独授权。
 2. 以仓库根目录作为 Docker 构建上下文，Dockerfile 路径为根目录 `Dockerfile`。构建和部署后配置监听端口 `3000`，环境变量 `PORT=3000`、`NODE_ENV=production`；健康探测为 HTTP `/health`。云托管网关必须支持 WebSocket 升级及长连接，原生端点 `/ws`、网页 `/socket.io/` 和网页静态文件共用同一端口。
@@ -163,3 +163,47 @@ Canvas 字段只显示内容和焦点，不提供原位 native input，也不绘
 个人返房专项浏览器验证：生产构建后执行 `node scripts/personal-view-verify.mjs`。复用本机 Chrome 与 Playwright，使用两个隔离上下文真实点击、刷新、核查深浅昵称并保存下载 PNG；证据在 `artifacts/个人返房浏览器验证.json` 和同目录中文命名图片。脚本自动停止自身服务。服务端专项集成回归覆盖六色唯一、重连、结果冻结、离线/未返回开局门槛和旧局请求。
 
 浏览器分享验证：先生产构建，再执行 `node scripts/share-runtime-verify.mjs`。需要本机 Chrome 与 Playwright；可用 `PLAYWRIGHT_MODULE` 指定 Playwright 模块绝对路径。脚本强制系统分享不可用以核查下载降级，输出两种 PNG 与结束页截图到 `artifacts`。系统原生分享面板需在真实设备手动验证。
+
+## 微信客户端云端构建与上传
+
+GitHub Actions 的 **Upload WeChat development build** 仅手动触发。在 Actions 页面点击 **Run workflow**，将 **Use workflow from** 保持为 `main`，再在 **Branch to build and upload** 填写已推送的目标分支名（默认 `main`）。只选择你信任的分支。每次运行构建并上传一个微信客户端，后端沿用现有部署流水线。
+
+在 GitHub 仓库 **Settings → Secrets and variables → Actions** 配置以下内容。
+
+| 类型 | 名称 | 值 |
+| --- | --- | --- |
+| Variable | `WECHAT_TARGET` | `miniprogram`（默认，uni-app 小程序）或 `minigame`（原生小游戏） |
+| Variable | `WECHAT_APPID` | 对应微信账号的 AppID |
+| Variable | `WECHAT_CLOUD_ENV` | 后端微信云托管环境 ID |
+| Variable | `WECHAT_CLOUD_SERVICE` | 后端微信云托管服务名 |
+| Variable | `WECHAT_RUNNER` | 可选。默认 `ubuntu-latest`。需要固定出口时，填能匹配固定公网出口 Linux runner 的专用标签，例如 `wechat-upload` |
+| Secret | `WECHAT_UPLOAD_KEY` | 对应 AppID 在微信公众平台「开发设置 → 代码上传」下载的密钥文件完整内容，保留换行 |
+
+在微信公众平台配置代码上传 IP 白名单时，填 runner 的**公网出口 IP**。GitHub 默认托管 runner 的出口 IP 会变化。如果启用了白名单，请使用固定出口的 runner，例如在有固定公网 NAT 出口的 Linux 云主机注册 GitHub Actions runner，添加专用标签并配置上表中的 `WECHAT_RUNNER`。
+
+流水线使用微信上传机器人 1，版本号为 `1.<运行编号>.<尝试次数>`，描述包含提交号。成功后在微信公众平台的版本管理中查看开发版本，按需要设置体验版或提交审核。审核通过后可在微信后台正式发布。
+
+### Codex 或其他 LLM 的上传操作手册
+
+用户可以直接说「把远端 `develop` 打包上传到微信开发版，等结果」。收到上传指令后，按以下步骤执行。
+
+1. **确认构建来源。** 仓库为 `todly/tongpin-game`，工作流为 `.github/workflows/wechat-upload.yml`。确认目标是该仓库已推送的分支，并记录它当前的提交号。用户明确指定分支时按其指定执行。用户明确要求构建当前工作区时，先核对本地改动是否已推送，只有获得推送授权后才推送。仅调用工作流时，默认构建远端 `main`。只构建可信分支，因为流水线会执行分支里的代码。
+2. **触发一次工作流。** 工作流定义始终从 `main` 加载，`build_branch` 才是要打包的远端分支。使用具备 Actions 运行权限的 GitHub 会话。已登录 GitHub CLI 时，以下命令以 `develop` 为例：
+
+   ```bash
+   gh workflow run wechat-upload.yml --repo todly/tongpin-game \
+     --ref main --raw-field build_branch=develop
+   ```
+
+   如果 CLI 不可用，可以使用已登录的浏览器打开 [微信上传工作流](https://github.com/todly/tongpin-game/actions/workflows/wechat-upload.yml)，点 **Run workflow**，**Use workflow from** 选 `main`，在 **Branch to build and upload** 填目标分支，再提交。触发后记录 GitHub 返回的运行链接或 ID。如果没有立即返回，检查该工作流最新的手动运行，结合触发时间和操作者确定本次运行，再决定是否重试。GitHub 运行详情显示的分支可能是 `main`，实际打包提交以 **Upload development version** 日志为准。 [GitHub CLI 手动触发文档](https://cli.github.com/manual/gh_workflow_run)
+
+3. **跟进到完成。** 用运行 ID 查看状态，结束后查看上传步骤日志。下面的 `RUN_ID` 指本次触发对应的运行编号：
+
+   ```bash
+   gh run watch RUN_ID --repo todly/tongpin-game --exit-status
+   gh run view RUN_ID --repo todly/tongpin-game --log
+   ```
+
+   浏览器中可打开运行详情并展开 **Upload development version**。仅当该步骤成功且日志出现 `已上传微信开发版本 <版本号> (<实际构建提交号>)` 时，才报告上传完成，并给出版本号、目标分支、实际构建提交号和 Actions 链接。若实际提交号与触发前记录的提交不同，报告实际上传的提交。若失败，查看失败步骤和错误，可用 `gh run view RUN_ID --repo todly/tongpin-game --log-failed`，并说明是否已经执行到上传。 [GitHub CLI 运行详情文档](https://cli.github.com/manual/gh_run_view)
+
+小程序或小游戏由仓库变量 `WECHAT_TARGET` 决定。上传密钥由 Actions Secret 注入，触发时只填写分支名。上传产物进入微信的**开发版本**，设置体验版、提审和正式发布需要单独操作。
