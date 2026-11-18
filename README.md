@@ -182,3 +182,28 @@ GitHub Actions 的 **Upload WeChat development build** 仅手动触发。在 Act
 在微信公众平台配置代码上传 IP 白名单时，填 runner 的**公网出口 IP**。GitHub 默认托管 runner 的出口 IP 会变化。如果启用了白名单，请使用固定出口的 runner，例如在有固定公网 NAT 出口的 Linux 云主机注册 GitHub Actions runner，添加专用标签并配置上表中的 `WECHAT_RUNNER`。
 
 流水线使用微信上传机器人 1，版本号为 `1.<运行编号>.<尝试次数>`，描述包含提交号。成功后在微信公众平台的版本管理中查看开发版本，按需要设置体验版或提交审核。审核通过后可在微信后台正式发布。
+
+### Codex 或其他 LLM 的上传操作手册
+
+用户可以直接说「把远端 `develop` 打包上传到微信开发版，等结果」。收到上传指令后，按以下步骤执行。
+
+1. **确认构建来源。** 仓库为 `todly/tongpin-game`，工作流为 `.github/workflows/wechat-upload.yml`。确认目标是该仓库已推送的分支，并记录它当前的提交号。用户明确指定分支时按其指定执行。用户明确要求构建当前工作区时，先核对本地改动是否已推送，只有获得推送授权后才推送。仅调用工作流时，默认构建远端 `main`。只构建可信分支，因为流水线会执行分支里的代码。
+2. **触发一次工作流。** 工作流定义始终从 `main` 加载，`build_branch` 才是要打包的远端分支。使用具备 Actions 运行权限的 GitHub 会话。已登录 GitHub CLI 时，以下命令以 `develop` 为例：
+
+   ```bash
+   gh workflow run wechat-upload.yml --repo todly/tongpin-game \
+     --ref main --raw-field build_branch=develop
+   ```
+
+   如果 CLI 不可用，可以使用已登录的浏览器打开 [微信上传工作流](https://github.com/todly/tongpin-game/actions/workflows/wechat-upload.yml)，点 **Run workflow**，**Use workflow from** 选 `main`，在 **Branch to build and upload** 填目标分支，再提交。触发后记录 GitHub 返回的运行链接或 ID。如果没有立即返回，检查该工作流最新的手动运行，结合触发时间和操作者确定本次运行，再决定是否重试。GitHub 运行详情显示的分支可能是 `main`，实际打包提交以 **Upload development version** 日志为准。 [GitHub CLI 手动触发文档](https://cli.github.com/manual/gh_workflow_run)
+
+3. **跟进到完成。** 用运行 ID 查看状态，结束后查看上传步骤日志。下面的 `RUN_ID` 指本次触发对应的运行编号：
+
+   ```bash
+   gh run watch RUN_ID --repo todly/tongpin-game --exit-status
+   gh run view RUN_ID --repo todly/tongpin-game --log
+   ```
+
+   浏览器中可打开运行详情并展开 **Upload development version**。仅当该步骤成功且日志出现 `已上传微信开发版本 <版本号> (<实际构建提交号>)` 时，才报告上传完成，并给出版本号、目标分支、实际构建提交号和 Actions 链接。若实际提交号与触发前记录的提交不同，报告实际上传的提交。若失败，查看失败步骤和错误，可用 `gh run view RUN_ID --repo todly/tongpin-game --log-failed`，并说明是否已经执行到上传。 [GitHub CLI 运行详情文档](https://cli.github.com/manual/gh_run_view)
+
+小程序或小游戏由仓库变量 `WECHAT_TARGET` 决定。上传密钥由 Actions Secret 注入，触发时只填写分支名。上传产物进入微信的**开发版本**，设置体验版、提审和正式发布需要单独操作。
