@@ -38,12 +38,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0609f0983b7a228f052f81ef4c3d6510cae254ad
-
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
-          cache: pnpm
+
+      - name: Install pnpm
+        run: npm install --global --no-audit --no-fund "$(node -p 'require("./package.json").packageManager')"
 
       - name: Configure WeChat target
         run: node scripts/wechat-release.cjs configure
