@@ -2,18 +2,12 @@ name: Upload WeChat development build
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/miniprogram/**'
-      - 'apps/minigame/**'
-      - 'packages/shared/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'tsconfig.base.json'
-      - 'scripts/wechat-release.cjs'
-      - '.github/workflows/wechat-upload.yml'
+    inputs:
+      build_branch:
+        description: Branch to build and upload
+        required: true
+        default: main
+        type: string
 
 permissions:
   contents: read
@@ -34,8 +28,17 @@ jobs:
       WECHAT_CLOUD_SERVICE: ${{ vars.WECHAT_CLOUD_SERVICE }}
 
     steps:
+      - name: Check out release tooling
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Save release tooling
+        run: cp scripts/wechat-release.cjs "$RUNNER_TEMP/wechat-release.cjs"
+
       - uses: actions/checkout@v6
         with:
+          ref: refs/heads/${{ inputs.build_branch }}
           persist-credentials: false
 
       - uses: actions/setup-node@v6
@@ -46,7 +49,7 @@ jobs:
         run: npm install --global --no-audit --no-fund "$(node -p 'require("./package.json").packageManager')"
 
       - name: Configure WeChat target
-        run: node scripts/wechat-release.cjs configure
+        run: node "$RUNNER_TEMP/wechat-release.cjs" configure
 
       - name: Build WeChat client
         run: |
@@ -68,7 +71,9 @@ jobs:
       - name: Upload development version
         env:
           WECHAT_UPLOAD_KEY: ${{ secrets.WECHAT_UPLOAD_KEY }}
-        run: node scripts/wechat-release.cjs upload
+        run: |
+          export WECHAT_BUILD_SHA="$(git rev-parse HEAD)"
+          node "$RUNNER_TEMP/wechat-release.cjs" upload
 
       - name: Remove upload tool
         if: always() && env.WECHAT_CI_DIR != ''

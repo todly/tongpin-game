@@ -166,7 +166,7 @@ Canvas 字段只显示内容和焦点，不提供原位 native input，也不绘
 
 ## 微信客户端云端构建与上传
 
-GitHub Actions 的 **Upload WeChat development build** 会在 `main` 上的微信客户端、共享包或构建配置变更后运行。也可以从 Actions 页面选择 `main` 手动运行。每次运行构建并上传一个微信客户端，后端沿用现有部署流水线。
+GitHub Actions 的 **Upload WeChat development build** 仅手动触发。在 Actions 页面点击 **Run workflow**，将 **Use workflow from** 保持为 `main`，再在 **Branch to build and upload** 填写已推送的目标分支名（默认 `main`）。只选择你信任的分支。每次运行构建并上传一个微信客户端，后端沿用现有部署流水线。
 
 在 GitHub 仓库 **Settings → Secrets and variables → Actions** 配置以下内容。
 

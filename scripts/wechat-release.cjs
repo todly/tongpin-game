@@ -1,7 +1,7 @@
 const { readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 
-const root = path.resolve(__dirname, '..');
+const root = process.cwd();
 const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
 const writeJson = (file, value) => writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
 
@@ -61,7 +61,7 @@ async function main() {
     ignores: isGame ? ['meta.json'] : [],
   });
   const version = `1.${required('GITHUB_RUN_NUMBER')}.${required('GITHUB_RUN_ATTEMPT')}`;
-  const commit = required('GITHUB_SHA').slice(0, 12);
+  const commit = required('WECHAT_BUILD_SHA').slice(0, 12);
   await ci.upload({
     project,
     version,
